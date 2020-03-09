@@ -52,9 +52,13 @@ double GetLaneLength(const Lane& lane) {
   return length;
 }
 
+// Note: 一条lane根据边界类型会被分割成多段
 void AddOutBoundary(const LaneBoundary& bound, double lane_length,
                     RepeatedPtrField<CurveRange>* const out_range) {
+  // Note: there may be different boundary_type for different s in boundary
+  // see LaneBoundaryType in map_lane.proto
   for (int i = 0; i < bound.boundary_type_size(); ++i) {
+    // Note: solid boundary
     if (!IsAllowedOut(bound.boundary_type(i))) {
       continue;
     }

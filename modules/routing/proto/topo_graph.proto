@@ -5,6 +5,7 @@ package apollo.routing;
 import "modules/map/proto/map_geometry.proto";
 
 message CurvePoint {
+  // Note: 相对于Lane中心线起始位置的s距离
   optional double s = 1;
 }
 
@@ -14,29 +15,48 @@ message CurveRange {
 }
 
 message Node {
+  // Note: Lane的id
   optional string lane_id = 1;
+  // Note: Lane的长度
   optional double length = 2;
+  // Note: Lane的left_boundary的虚线部分的区间范围(变道区间)
   repeated CurveRange left_out = 3;
+  // Note: Lane的right_boundary的虚线部分的区间范围(变道区间)
   repeated CurveRange right_out = 4;
+  // Note: 代价由Lane的speed_limit大小和turn类型决定
+  // speed limit越高cost越小, 不同类型的转弯车道根据routing_config有固定的cost
   optional double cost = 5;
+  // Note: Lane中心线
   optional apollo.hdmap.Curve central_curve = 6;
+  // Note: 虚拟的Lane形成的Node(十字路口的虚拟Lane), 这个字段无实际用途
   optional bool is_virtual = 7 [default = true];
+  // Note: Lane所在的Road的id
   optional string road_id = 8;
 }
 
 message Edge {
+  // Note: DirectionType指的是from_lane_id->to_lane_id的方向
   enum DirectionType {
+    // Note: to_lane_id在from_lane_id的successor_id中
     FORWARD = 0;
+    // Note: to_lane_id在from_lane_id的left_neighbor_forward_lane_id中
     LEFT = 1;
+    // Note: to_lane_id在from_lane_id的right_neighbor_forward_lane_id中
     RIGHT = 2;
   }
 
+  // Note: Edge起点
   optional string from_lane_id = 1;
+  // Note: Edge终点
   optional string to_lane_id = 2;
+  // Note: FORWARD类型的Edge的cost为0
+  // LEFT/RIGHT类型的Edge的cost与变道区间总长度呈负相关
   optional double cost = 3;
+  // Note: DirectionType指的是from_lane_id->to_lane_id的方向
   optional DirectionType direction_type = 4;
 }
 
+// Note: Routing地图由代表Lane的Node和表示Lane之间的连接关系的Edge组成
 message Graph {
   optional string hdmap_version = 1;
   optional string hdmap_district = 2;

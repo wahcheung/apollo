@@ -61,6 +61,7 @@ GraphCreator::GraphCreator(const std::string& base_map_file_path,
       routing_conf_(routing_conf) {}
 
 bool GraphCreator::Create() {
+  // Note: 加载base_map
   if (absl::EndsWith(base_map_file_path_, ".xml")) {
     if (!hdmap::adapter::OpendriveAdapter::LoadData(base_map_file_path_,
                                                     &pbmap_)) {
@@ -83,6 +84,7 @@ bool GraphCreator::Create() {
   road_id_map_.clear();
   showed_edge_id_set_.clear();
 
+  // Note: 获取lane_id -> road_id对应关系
   for (const auto& road : pbmap_.road()) {
     for (const auto& section : road.section()) {
       for (const auto& lane_id : section.lane_id()) {
@@ -91,10 +93,15 @@ bool GraphCreator::Create() {
     }
   }
 
+  // Note: 将非CITY_DRIVING的land id添加到禁止通行的lane名单
+  // 因为这一类lane不允许机动车通行, 例如自行车道
   InitForbiddenLanes();
   const double min_turn_radius =
       VehicleConfigHelper::GetConfig().vehicle_param().min_turn_radius();
 
+  // Note: 添加拓扑地图的节点
+  // every valid city driving Lane as a Node
+  // non-city-driving Lane and invalid u-turn Lanes are excluded
   for (const auto& lane : pbmap_.lane()) {
     const auto& lane_id = lane.id().id();
     if (forbidden_lane_id_set_.find(lane_id) != forbidden_lane_id_set_.end()) {
@@ -108,6 +115,7 @@ bool GraphCreator::Create() {
       continue;
     }
     AINFO << "Current lane id: " << lane_id;
+    // Note: Lane对应的Node的下标
     node_index_map_[lane_id] = graph_.node_size();
     const auto iter = road_id_map_.find(lane_id);
     if (iter != road_id_map_.end()) {
@@ -119,6 +127,7 @@ bool GraphCreator::Create() {
     }
   }
 
+  // Note: 添加拓扑地图的连接边
   for (const auto& lane : pbmap_.lane()) {
     const auto& lane_id = lane.id().id();
     if (forbidden_lane_id_set_.find(lane_id) != forbidden_lane_id_set_.end()) {
@@ -128,10 +137,13 @@ bool GraphCreator::Create() {
     }
     const auto& from_node = graph_.node(node_index_map_[lane_id]);
 
+    // Note: 直行的Edge的cost为0
     AddEdge(from_node, lane.successor_id(), Edge::FORWARD);
     if (lane.length() < FLAGS_min_length_for_lane_change) {
       continue;
     }
+    // Note: 左变道或者右变道的Edge的cost与变道区间长度有关,
+    // 小于设定值时, 变道区间越短cost越高
     if (lane.has_left_boundary() && IsAllowedToCross(lane.left_boundary())) {
       AddEdge(from_node, lane.left_neighbor_forward_lane_id(), Edge::LEFT);
     }

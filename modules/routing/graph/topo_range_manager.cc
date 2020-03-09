@@ -25,10 +25,14 @@ namespace apollo {
 namespace routing {
 namespace {
 
+// Note: 对topo_node的多个NodeSRange区间进行合并和拼接
+// [1, 3]和[2, 4]会被合并成[1, 4]
+// [1, 2]和[2, 3]会被拼接成[1, 3]
 void merge_block_range(const TopoNode* topo_node,
                        const std::vector<NodeSRange>& origin_range,
                        std::vector<NodeSRange>* block_range) {
   std::vector<NodeSRange> sorted_origin_range(origin_range);
+  // Note: NodeSRange重载了<运算符, 这里将NodeSRange按照start_s从小到大排序
   std::sort(sorted_origin_range.begin(), sorted_origin_range.end());
   size_t cur_index = 0;
   auto total_size = sorted_origin_range.size();
@@ -76,11 +80,16 @@ void TopoRangeManager::PrintDebugInfo() const {
 
 void TopoRangeManager::Clear() { range_map_.clear(); }
 
+// Note: 在black_list_range_generator中会通过这个接口添加LaneSegment黑名单
 void TopoRangeManager::Add(const TopoNode* node, double start_s, double end_s) {
   NodeSRange range(start_s, end_s);
   range_map_[node].push_back(range);
 }
 
+// Note: 对黑名单区间进行排序, 然后合并区间,
+// Note: 对黑名单NodeSRange区间会进行合并和拼接
+// [1, 3]和[2, 4]会被合并成[1, 4]
+// [1, 2]和[2, 3]会被拼接成[1, 3]
 void TopoRangeManager::SortAndMerge() {
   for (auto& iter : range_map_) {
     std::vector<NodeSRange> merged_range_vec;

@@ -21,6 +21,8 @@
 namespace apollo {
 namespace routing {
 
+// Note: sorted_vec为已经排序的区间, 找到value_s所在区间
+// 如果value_s不在任何区间里面, 则取值较大的相邻区间
 template <typename T>
 int BinarySearchForSLarger(const std::vector<T>& sorted_vec, double value_s) {
   if (sorted_vec.empty()) {
@@ -46,6 +48,8 @@ int BinarySearchForSLarger(const std::vector<T>& sorted_vec, double value_s) {
   return end_index;
 }
 
+// Note: sorted_vec为已经排序的区间, 找到value_s所在区间
+// 如果value_s不在任何区间里面, 则取值较小的相邻区间
 template <typename T>
 int BinarySearchForSSmaller(const std::vector<T>& sorted_vec, double value_s) {
   if (sorted_vec.empty()) {

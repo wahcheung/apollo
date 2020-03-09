@@ -42,10 +42,15 @@ class AStarStrategy : public Strategy {
 
  private:
   bool change_lane_enabled_;
+  // Note: 未考察的TopoNode集合
   std::unordered_set<const TopoNode*> open_set_;
+  // Note: 已考察的TopoNode集合
   std::unordered_set<const TopoNode*> closed_set_;
+  // Note: 记录TopoNode的父TopoNode
   std::unordered_map<const TopoNode*, const TopoNode*> came_from_;
+  // Note: 到达当前TopoNode所需的cost
   std::unordered_map<const TopoNode*, double> g_score_;
+  // Note: 计算的进入当前TopoNode时所在的位置
   std::unordered_map<const TopoNode*, double> enter_s_;
 };
 

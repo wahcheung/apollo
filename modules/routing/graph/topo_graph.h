@@ -50,9 +50,14 @@ class TopoGraph {
  private:
   std::string map_version_;
   std::string map_district_;
+  // Note: 存放所有从routing_map加载来的TopoNode
+  // lane_id对应的TopoNode的下标可以通过lane_id查表node_index_map_得到
   std::vector<std::shared_ptr<TopoNode> > topo_nodes_;
+  // Note: TopoEdge列表
   std::vector<std::shared_ptr<TopoEdge> > topo_edges_;
+  // Note: lane_id对应的TopoNode在topo_nodes_中的下标
   std::unordered_map<std::string, int> node_index_map_;
+  // Note: road_id对应的TopoNode的集合
   std::unordered_map<std::string, std::unordered_set<const TopoNode*> >
       road_node_map_;
 };
