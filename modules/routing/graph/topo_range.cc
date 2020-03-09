@@ -57,6 +57,7 @@ bool NodeSRange::MergeRangeOverlap(const NodeSRange& other) {
   if (!IsValid() || !other.IsValid()) {
     return false;
   }
+  // Note: SRange无重合
   if (other.StartS() > EndS() || other.EndS() < StartS()) {
     return false;
   }

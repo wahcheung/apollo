@@ -93,10 +93,24 @@ class SubTopoGraph {
       const std::unordered_set<const TopoEdge*> origin_edge);
 
  private:
+  // Note: 所有被创建的TopoNode, 这个成员变量不被使用(多余的)
   std::vector<std::shared_ptr<TopoNode>> topo_nodes_;
+  // Note: 记录创建的子图的TopoEdge, 这个成员变量不被使用(多余的)
   std::vector<std::shared_ptr<TopoEdge>> topo_edges_;
+  // Note: <origin TopoNode*, valid range的子TopoNode列表>
+  // 注意, 如果topo graph的某个TopoNode没有黑名单LaneSegment,
+  // 则这个TopoNode不会在这里面
+  // Note: 可能某个TopoNode没有任何的NodeWithRange，例如Road黑名单中的Lane对应的TopoNode
+  // 这种黑名单Lane的0, 0]和[length, length] valid range在创建子TopoNode前就被过滤了
+  // 过滤的逻辑在InitSubNodeByValidRange函数里面
   std::unordered_map<const TopoNode*, std::vector<NodeWithRange>>
       sub_node_range_sorted_map_;
+  // Note: <原TopoNode*, valid range的子TopoNode集合>
+  // 注意, 如果topo graph的某个TopoNode没有黑名单LaneSegment,
+  // 则这个TopoNode不会在这里面
+  // Note: 可能某个TopoNode没有任何的NodeWithRange，例如Road黑名单中的Lane对应的TopoNode
+  // 这种黑名单Lane的0, 0]和[length, length] valid range在创建子TopoNode前就被过滤了
+  // 过滤的逻辑在InitSubNodeByValidRange函数里面
   std::unordered_map<const TopoNode*, std::unordered_set<TopoNode*>>
       sub_node_map_;
 };

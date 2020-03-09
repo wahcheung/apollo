@@ -49,15 +49,26 @@ class GraphCreator {
   static bool IsValidUTurn(const hdmap::Lane& lane, const double radius);
 
  private:
+  // Note: base_map的文件路径, base_map是创建Routing地图的信息来源
   std::string base_map_file_path_;
+  // Note: Routing地图的输出路径
   std::string dump_topo_file_path_;
+  // Note: base_map的内容
   hdmap::Map pbmap_;
+  // Note: 最终要输出的Routing地图的内容
   Graph graph_;
+  // Note: lane_id对应的Node的下标, 即Lane对应Node在graph_.node的下标
   std::unordered_map<std::string, int> node_index_map_;
+  // Note: 从地图中直接获取的所有Lane的id及其对应的Road的id, <lane_id, road_id>
+  // 这里包含所有的Lane(含禁止通行的非机动车道等)
+  // 用于查询Lane所在的Road
   std::unordered_map<std::string, std::string> road_id_map_;
+  // Note: 已经添加到graph_中的Edge的id, 用于避免重复添加Edge
   std::unordered_set<std::string> showed_edge_id_set_;
+  // Note: Lane's type is not CITY_DRIVING which is not allowed for driving
   std::unordered_set<std::string> forbidden_lane_id_set_;
 
+  // Note: Routing地图的配置信息, 主要是一些会影响Node和Edge的cost的配置
   const RoutingConfig& routing_conf_;
 };
 

@@ -53,10 +53,18 @@ class Navigator {
 
  private:
   bool is_ready_ = false;
+  // Note: origin拓扑地图, 从routing map加载后保持不变
   std::unique_ptr<TopoGraph> graph_;
 
+  // Note: 黑名单管理, origin TopoNode和对应的黑名单NodeSRange
+  // 包含了从routing request读取的黑名单Lane Segment
+  // request中黑名单Road包含的所有的Lane对应的完整的NodeSRange也是黑名单
+  // 上面两个黑名单通过GenerateBlackMapFromRequest添加
+  // 里面的NodeSRange已经排好序并经过合并
   TopoRangeManager topo_range_manager_;
 
+  // Note: 负责生成黑名单，管理者黑名单生成的接口
+  // 生成的黑名单都存放在topo_range_manager_里面
   std::unique_ptr<BlackListRangeGenerator> black_list_generator_;
   std::unique_ptr<ResultGenerator> result_generator_;
 };

@@ -78,25 +78,41 @@ class TopoNode {
   void AddOutEdge(const TopoEdge* edge);
 
  private:
+  // Note: 找lane中心线的中间点作为锚点
+  // 找左右虚线边界最长的range, 并简单地通过长度判断是否足够用于lane change
   void Init();
+  // Note: anchor point在lane中心线的中间位置点
   bool FindAnchorPoint();
   void SetAnchorPoint(const common::PointENU& anchor_point);
 
+  // Note: TopoNode的来源Node, 即拓扑地图中的Node
   Node pb_node_;
+  // Note: 就是TopoNode表示的LaneSegment的中心线的中间点
+  // 这个用来评估当前LaneSegment到终点的距离(作为heuristic cost)
   common::PointENU anchor_point_;
 
+  // Note: TopoNode的起始位置(相对于Lane起点s距离)
   double start_s_;
+  // Note: TopoNode的结束位置(相对于Lane起点s距离)
   double end_s_;
+  // Note: prefer_range大于设置的最小变道区间则认为长度足够
   bool is_left_range_enough_;
+  // Note: lane左边界最大的虚线range的left_out_sorted_range_下标
   int left_prefer_range_index_;
+  // Note: prefer_range大于设置的最小变道区间则认为长度足够
   bool is_right_range_enough_;
+  // Note: lane右边界最大的虚线range的right_out_sorted_range_下标
   int right_prefer_range_index_;
 
+  // out range按start_s从小到大排序
   std::vector<NodeSRange> left_out_sorted_range_;
   std::vector<NodeSRange> right_out_sorted_range_;
 
+  // Note: 从任意方向进入当前TopoNode的TopoEdge集合
   std::unordered_set<const TopoEdge*> in_from_all_edge_set_;
+  // Note: 从左(left)边进入(in)当前TopoNode的TopoEdge集合
   std::unordered_set<const TopoEdge*> in_from_left_edge_set_;
+  // Note: 从右(right)边进入(in)当前TopoNode的TopoEdge集合
   std::unordered_set<const TopoEdge*> in_from_right_edge_set_;
   std::unordered_set<const TopoEdge*> in_from_left_or_right_edge_set_;
   std::unordered_set<const TopoEdge*> in_from_pre_edge_set_;
@@ -106,7 +122,11 @@ class TopoNode {
   std::unordered_set<const TopoEdge*> out_to_left_or_right_edge_set_;
   std::unordered_set<const TopoEdge*> out_to_suc_edge_set_;
 
+  // Note: 对于某个TopoNode A，可以查询this TopoNode能否进入A
+  // 例如, out_edge_map_[A]可以获取从this TopoNode进入A的TopoEdge
   std::unordered_map<const TopoNode*, const TopoEdge*> out_edge_map_;
+  // Note: 对于某个TopoNode A，可以查询A是否能进入this TopoNode
+  // 例如, in_edge_map_[A]可以获取从A进入this TopoNode的TopoEdge
   std::unordered_map<const TopoNode*, const TopoEdge*> in_edge_map_;
 
   const TopoNode* origin_node_;

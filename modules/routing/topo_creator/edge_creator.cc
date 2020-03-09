@@ -30,14 +30,17 @@ void GetPbEdge(const Node& node_from, const Node& node_to,
   edge->set_direction_type(type);
 
   edge->set_cost(0.0);
+  // Note: to_lane是from_lane的left/right neighbour
   if (type == Edge::LEFT || type == Edge::RIGHT) {
     const auto& target_range =
         (type == Edge::LEFT) ? node_from.left_out() : node_from.right_out();
     double changing_area_length = 0.0;
     for (const auto& range : target_range) {
+      // Note: 变道区间长度
       changing_area_length += range.end().s() - range.start().s();
     }
     double ratio = 1.0;
+    // Note: 变道区间长度不足预设值则根据增大cost
     if (changing_area_length < routing_config.base_changing_length()) {
       ratio = std::pow(
           changing_area_length / routing_config.base_changing_length(), -1.5);

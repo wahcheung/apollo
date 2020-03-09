@@ -32,6 +32,7 @@ Routing::Routing()
 apollo::common::Status Routing::Init() {
   const auto routing_map_file = apollo::hdmap::RoutingMapFile();
   AINFO << "Use routing topology graph path: " << routing_map_file;
+  // Note: Navigator加载拓扑地图, 将拓扑地图中的Node和Edge转为TopoNode和TopoEdge
   navigator_ptr_.reset(new Navigator(routing_map_file));
   CHECK(
       cyber::common::GetProtoFromFile(FLAGS_routing_conf_file, &routing_conf_))
@@ -56,6 +57,8 @@ apollo::common::Status Routing::Start() {
   return apollo::common::Status::OK();
 }
 
+// Note: 不全routing request信息
+// 如果waypoint没有id, 找waypoint最近的Lane的id作为waypoint的id
 RoutingRequest Routing::FillLaneInfoIfMissing(
     const RoutingRequest& routing_request) {
   RoutingRequest fixed_request(routing_request);
@@ -89,6 +92,7 @@ bool Routing::Process(const std::shared_ptr<RoutingRequest>& routing_request,
                       RoutingResponse* const routing_response) {
   CHECK_NOTNULL(routing_response);
   AINFO << "Get new routing request:" << routing_request->DebugString();
+  // Note: 如果waypoint没有id, 找waypoint最近的Lane的id作为waypoint的id
   const auto& fixed_request = FillLaneInfoIfMissing(*routing_request);
   if (!navigator_ptr_->SearchRoute(fixed_request, routing_response)) {
     AERROR << "Failed to search route with navigator.";

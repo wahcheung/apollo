@@ -46,6 +46,13 @@ const NodeWithRange& GetLargestRange(
   return node_vec[result_idx];
 }
 
+// Note: 将路由结果分割成多个直行通道(passage)
+// passage表示的是连续的直行通道
+// 举个例子，对于路由结果A-->B-->C-->D-->E-->F
+// 如果C-->D的连接是一条左转/右转边，其他的都是直行边，
+// 则上面的结果会被分成两个passage[A-->B-->C]和[D-->E-->F]
+// Note: passage有个标签change_lane_type表示当前passage是怎么进入下一个passage的
+// Note: 最后一个passage的change_lane_type为FORWARD
 bool ResultGenerator::ExtractBasicPassages(
     const std::vector<NodeWithRange>& nodes,
     std::vector<PassageInfo>* const passages) {
@@ -89,6 +96,7 @@ bool ResultGenerator::IsReachableFromWithChangeLane(
   return false;
 }
 
+// Note: 判断from_nodes是否能通过变道类型的Edge连接到to_node
 bool ResultGenerator::IsReachableToWithChangeLane(
     const TopoNode* to_node, const PassageInfo& from_nodes,
     NodeWithRange* reachable_node) {
@@ -164,6 +172,7 @@ void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
   }
 }
 
+// Note: 这里的逻辑真让人看不懂
 void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
                                     const PassageInfo& next_passage,
                                     PassageInfo* const curr_passage) {
@@ -172,6 +181,7 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
     node_set_of_curr_passage.insert(node.GetTopoNode());
   }
   auto& back_node = curr_passage->nodes.back();
+  // Note: back_node所在的Lane有黑名单导致不是整条Lane都可以通行
   if (!IsCloseEnough(back_node.EndS(), back_node.FullLength())) {
     if (!range_manager.Find(back_node.GetTopoNode())) {
       if (IsCloseEnough(next_passage.nodes.back().EndS(),
@@ -313,6 +323,7 @@ bool ResultGenerator::GeneratePassageRegion(
     const std::vector<NodeWithRange>& nodes,
     const TopoRangeManager& range_manager, RoutingResponse* const result) {
   std::vector<PassageInfo> passages;
+  // Note: 将路由结果分割成多个直行通道(passage)
   if (!ExtractBasicPassages(nodes, &passages)) {
     return false;
   }
@@ -329,6 +340,7 @@ void ResultGenerator::AddRoadSegment(
     const std::pair<std::size_t, std::size_t>& end, RoutingResponse* result) {
   auto* road = result->add_road();
   road->set_id(passages[start.first].nodes[start.second].RoadId());
+  // Note: i是passage范围
   for (std::size_t i = start.first; i <= end.first && i < passages.size();
        ++i) {
     auto* passage = road->add_passage();
@@ -347,6 +359,9 @@ void ResultGenerator::AddRoadSegment(
   }
 }
 
+// Note: 将routing结果转换成RoadSegment的表示形式
+// 就是将这些passages按照橫截面变化切割成多段
+// 变道时并行的2(或多)条NodeSRange被放到同一个RoadSegment里面
 void ResultGenerator::CreateRoadSegments(
     const std::vector<PassageInfo>& passages, RoutingResponse* result) {
   CHECK(!passages.empty()) << "passages empty";
@@ -357,9 +372,15 @@ void ResultGenerator::CreateRoadSegments(
     const auto& curr_nodes = passages[i].nodes;
     for (std::size_t j = 0; j < curr_nodes.size(); ++j) {
       if ((i + 1 < passages.size() &&
+           // Note: 判断passages[i + 1]是否有OutEdge连接到curr_nodes[j]
+           // Note: 判断下一passage能否进入当前节点,
+           // 例如curr_nodes[j]是变道前的passage的最后一个节点?
            IsReachableToWithChangeLane(curr_nodes[j].GetTopoNode(),
                                        passages[i + 1], &fake_node_range)) ||
           (i > 0 &&
+           // Note: 判断passages[i - 1]是否有来自curr_nodes[j]的InEdge
+           // Note: 判断当前节点能够进入上一passage,
+           // 例如curr_nodes[j]是变道后passage的第一个节点?
            IsReachableFromWithChangeLane(curr_nodes[j].GetTopoNode(),
                                          passages[i - 1], &fake_node_range))) {
         if (!in_change_lane) {

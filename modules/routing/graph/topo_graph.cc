@@ -27,6 +27,9 @@ void TopoGraph::Clear() {
   node_index_map_.clear();
 }
 
+// Note: TopoNode初始化时会获取锚点, 对变道区间根据start_s进行排序
+// 计算最长的边界range, 并分别判断左右两边的最大变道区间是否足够用于变道(长度超过设定值)
+// 变道区间此处未进行区间合并处理
 bool TopoGraph::LoadNodes(const Graph& graph) {
   if (graph.node().empty()) {
     AERROR << "No nodes found in topology graph.";
@@ -43,6 +46,7 @@ bool TopoGraph::LoadNodes(const Graph& graph) {
 }
 
 // Need to execute load_nodes() firstly
+// Note: 根据拓扑地图中的Edge形成TopoEdge并添加对应TopoNode的InEdge和OutEdge
 bool TopoGraph::LoadEdges(const Graph& graph) {
   if (graph.edge().empty()) {
     AINFO << "0 edges found in topology graph, but it's fine";
@@ -66,6 +70,7 @@ bool TopoGraph::LoadEdges(const Graph& graph) {
   return true;
 }
 
+// Note: 加载拓扑地图(origin TopoNode和origin TopoEdge)
 bool TopoGraph::LoadGraph(const Graph& graph) {
   Clear();
 
@@ -96,6 +101,7 @@ const TopoNode* TopoGraph::GetNode(const std::string& id) const {
   return topo_nodes_[iter->second].get();
 }
 
+// Note: road_id对应的Road包含的所有的Lane Nodes
 void TopoGraph::GetNodesByRoadId(
     const std::string& road_id,
     std::unordered_set<const TopoNode*>* const node_in_road) const {

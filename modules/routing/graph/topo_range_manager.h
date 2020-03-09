@@ -39,6 +39,9 @@ class TopoRangeManager {
   void SortAndMerge();
 
  private:
+  // Note: origin TopoNode对应的一系列黑名单NodeSRange(不允许通行)
+  // 在BlackListRangeGenerator中添加的NodeSRange黑名单
+  // 这里的TopoNode指针还是刚开始加载拓扑地图后的origin TopoNode的指针
   std::unordered_map<const TopoNode*, std::vector<NodeSRange>> range_map_;
 };
 
