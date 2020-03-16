@@ -166,6 +166,7 @@ void LaneInfo::Init() {
     sampled_right_width_.emplace_back(sample.s(), sample.width());
   }
 
+  // Note: 对一些包含不合理数据的Lane输出错误信息
   if (lane_.has_type()) {
     if (lane_.type() == Lane::CITY_DRIVING) {
       for (const auto &p : sampled_left_width_) {

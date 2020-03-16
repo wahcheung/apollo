@@ -107,6 +107,7 @@ int HDMapImpl::LoadMapFromProto(const Map& map_proto) {
   for (const auto& road : map_.road()) {
     road_table_[road.id().id()].reset(new RoadInfo(road));
   }
+  // Note: 给Lane添加road_id和section_id属性
   for (const auto& road_ptr_pair : road_table_) {
     const auto& road_id = road_ptr_pair.second->id();
     for (const auto& road_section : road_ptr_pair.second->sections()) {
@@ -122,6 +123,7 @@ int HDMapImpl::LoadMapFromProto(const Map& map_proto) {
       }
     }
   }
+  // Note: 将Lane的各种overlap都添加到Lane信息中
   for (const auto& lane_ptr_pair : lane_table_) {
     lane_ptr_pair.second->PostProcess(*this);
   }
@@ -204,11 +206,13 @@ PNCJunctionInfoConstPtr HDMapImpl::GetPNCJunctionById(const Id& id) const {
   return it != pnc_junction_table_.end() ? it->second : nullptr;
 }
 
+// Note: 搜索一定距离内的所有Lane
 int HDMapImpl::GetLanes(const PointENU& point, double distance,
                         std::vector<LaneInfoConstPtr>* lanes) const {
   return GetLanes({point.x(), point.y()}, distance, lanes);
 }
 
+// Note: 搜索一定距离内的所有Lane
 int HDMapImpl::GetLanes(const Vec2d& point, double distance,
                         std::vector<LaneInfoConstPtr>* lanes) const {
   if (lanes == nullptr || lane_segment_kdtree_ == nullptr) {
@@ -227,11 +231,13 @@ int HDMapImpl::GetLanes(const Vec2d& point, double distance,
   return 0;
 }
 
+// Note: 搜索一定距离内的所有Road
 int HDMapImpl::GetRoads(const PointENU& point, double distance,
                         std::vector<RoadInfoConstPtr>* roads) const {
   return GetRoads({point.x(), point.y()}, distance, roads);
 }
 
+// Note: 搜索一定距离内的所有Road
 int HDMapImpl::GetRoads(const Vec2d& point, double distance,
                         std::vector<RoadInfoConstPtr>* roads) const {
   std::vector<LaneInfoConstPtr> lanes;

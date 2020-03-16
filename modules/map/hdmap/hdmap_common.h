@@ -233,12 +233,22 @@ class LaneInfo {
   void set_section_id(const Id &section_id) { section_id_ = section_id; }
 
  private:
+  // Note: 从地图文件中加载的原始Lane数据
   const Lane &lane_;
+  // Note: Lane中心线central_curve上的点
   std::vector<apollo::common::math::Vec2d> points_;
+  // Note: points_的朝向，实际上是segments_线段的朝向(这个朝向用一个单位向量表示)
+  // 中心线最后两个点的朝向都使用最后一段segment的朝向
   std::vector<apollo::common::math::Vec2d> unit_directions_;
+  // Note: points_的朝向，直接从unit_directions_算的角度
+  // 取值范围是[-π, π]
   std::vector<double> headings_;
+  // Note: 中心线上的N个点(即points_)形成N-1条线段
   std::vector<apollo::common::math::LineSegment2d> segments_;
+  // Note: points_中的点对应的累积距离
+  // 第一个点，即Lane的中心线其实点的累积距离为0
   std::vector<double> accumulated_s_;
+  // Note: Lane的所有overlap的字符串id
   std::vector<std::string> overlap_ids_;
   std::vector<OverlapInfoConstPtr> overlaps_;
   std::vector<OverlapInfoConstPtr> cross_lanes_;
@@ -251,11 +261,16 @@ class LaneInfo {
   std::vector<OverlapInfoConstPtr> speed_bumps_;
   std::vector<OverlapInfoConstPtr> parking_spaces_;
   std::vector<OverlapInfoConstPtr> pnc_junctions_;
+  // Note: Lane中心线的长度
   double total_length_ = 0.0;
+  // Note: Lane左边界的SampledWidth，记录某个s处的中心线到Lane左边界的距离
   std::vector<SampledWidth> sampled_left_width_;
+  // Note: Lane右边界的SampledWidth，记录某个s处的中心线到右边界的距离
   std::vector<SampledWidth> sampled_right_width_;
 
+  // Note: Road左边界的SampledWidth，记录某个s处的中心线到Road左边界的距离
   std::vector<SampledWidth> sampled_left_road_width_;
+  // Note: Road右边界的SampledWidth，记录某个s处的中心线到Road右边界的距离
   std::vector<SampledWidth> sampled_right_road_width_;
 
   std::vector<LaneSegmentBox> segment_box_list_;
@@ -310,6 +325,7 @@ class SignalInfo {
 
  private:
   const Signal &signal_;
+  // Note: stop_line上的点形成的segments
   std::vector<apollo::common::math::LineSegment2d> segments_;
 };
 using SignalSegmentBox =
