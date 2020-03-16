@@ -395,7 +395,9 @@ class HDMapImpl {
   void Clear();
 
  private:
+  // Note: 从base_map读取的地图
   Map map_;
+  // Note: 根据id查询对应地图结构的Info
   LaneTable lane_table_;
   JunctionTable junction_table_;
   CrosswalkTable crosswalk_table_;
