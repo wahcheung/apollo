@@ -102,6 +102,7 @@ class OnLanePlanning : public PlanningBase {
                              planning_internal::Debug* debug_chart);
 
  private:
+  // Note: 上一帧的routing结果
   routing::RoutingResponse last_routing_;
   std::unique_ptr<ReferenceLineProvider> reference_line_provider_;
   Smoother planning_smoother_;

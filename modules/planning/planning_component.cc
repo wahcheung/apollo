@@ -137,6 +137,7 @@ bool PlanningComponent::Proc(
   // modify trajectory relative time due to the timestamp change in header
   const double dt = start_time - adc_trajectory_pb.header().timestamp_sec();
   for (auto& p : *adc_trajectory_pb.mutable_trajectory_point()) {
+    // Note: 这里不应该是-dt么
     p.set_relative_time(p.relative_time() + dt);
   }
   planning_writer_->Write(adc_trajectory_pb);
@@ -148,6 +149,7 @@ bool PlanningComponent::Proc(
   return true;
 }
 
+// Note: 如果上下文中判断需要rerouting，则将新的routing结果输出
 void PlanningComponent::CheckRerouting() {
   auto* rerouting = PlanningContext::Instance()
                         ->mutable_planning_status()
@@ -160,6 +162,7 @@ void PlanningComponent::CheckRerouting() {
   rerouting_writer_->Write(rerouting->routing_request());
 }
 
+// Note: 检查存放在local_view_中的输入数据是不是非空
 bool PlanningComponent::CheckInput() {
   ADCTrajectory trajectory_pb;
   auto* not_ready = trajectory_pb.mutable_decision()
