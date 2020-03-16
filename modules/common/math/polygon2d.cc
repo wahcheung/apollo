@@ -201,6 +201,8 @@ void Polygon2d::BuildFromPoints() {
   // Make sure the points are in ccw order.
   area_ = 0.0;
   for (int i = 1; i < num_points_; ++i) {
+    // Note: 通过cross product(除以2)求三角形面积
+    // 所有三角形面积加起来就是多边形面积
     area_ += CrossProd(points_[0], points_[i - 1], points_[i]);
   }
   if (area_ < 0) {

@@ -98,6 +98,7 @@ Status OnLanePlanning::Init(const PlanningConfig& config) {
   PlanningContext::Instance()->mutable_planning_status()->Clear();
 
   // load map
+  // Note: 高精度语义地图，提供与地图相关的信息
   hdmap_ = HDMapUtil::BaseMapPtr();
   CHECK(hdmap_) << "Failed to load map";
 
@@ -164,6 +165,7 @@ Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
 }
 
 // TODO(all): fix this! this will cause unexpected behavior from controller
+// Note: 紧急停车
 void OnLanePlanning::GenerateStopTrajectory(ADCTrajectory* ptr_trajectory_pb) {
   ptr_trajectory_pb->clear_trajectory_point();
 
@@ -202,11 +204,13 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   // chassis
   ADEBUG << "Get chassis:" << local_view_.chassis->DebugString();
 
+  // Note: 根据输入信息更新自车状态(位置/速度/加速度/kappa/角速度/档位等)
   Status status = VehicleStateProvider::Instance()->Update(
       *local_view_.localization_estimate, *local_view_.chassis);
 
   VehicleState vehicle_state =
       VehicleStateProvider::Instance()->vehicle_state();
+  // Note: 一般就是local_view_中localization_estimate的时间戳
   const double vehicle_state_timestamp = vehicle_state.timestamp();
   DCHECK_GE(start_timestamp, vehicle_state_timestamp)
       << "start_timestamp is behind vehicle_state_timestamp by "
@@ -229,11 +233,13 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
     return;
   }
 
+  // Note: 时间变化比较小，将vehicle_state的时间戳更新到当前时间并且根据估计来更新当前位置
   if (start_timestamp - vehicle_state_timestamp <
       FLAGS_message_latency_threshold) {
     vehicle_state = AlignTimeStamp(vehicle_state, start_timestamp);
   }
 
+  // Note: 新的routing，清空planning的历史帧信息，清空planning上下文
   if (util::IsDifferentRouting(last_routing_, *local_view_.routing)) {
     last_routing_ = *local_view_.routing;
     History::Instance()->Clear();
