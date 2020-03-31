@@ -36,6 +36,7 @@ namespace hdmap {
 // class LaneInfoConstPtr;
 // class OverlapInfoConstPtr;
 
+// Note: waypoint在Lane中的位置信息(s, l)
 struct LaneWaypoint {
   LaneWaypoint() = default;
   LaneWaypoint(LaneInfoConstPtr lane, const double s)

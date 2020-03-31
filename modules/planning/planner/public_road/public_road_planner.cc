@@ -24,6 +24,7 @@ namespace planning {
 using apollo::common::Status;
 using apollo::common::TrajectoryPoint;
 
+// Note: 初始化ScenarioManager(注册场景并设置默认场景)
 Status PublicRoadPlanner::Init(const PlanningConfig& config) {
   config_ = config;
   scenario_manager_.Init();

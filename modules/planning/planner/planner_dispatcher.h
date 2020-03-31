@@ -39,6 +39,7 @@ class PlannerDispatcher {
   PlannerDispatcher() = default;
   virtual ~PlannerDispatcher() = default;
 
+  // Note: 注册各类Planner
   virtual common::Status Init() {
     RegisterPlanners();
     return common::Status::OK();

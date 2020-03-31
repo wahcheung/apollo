@@ -160,21 +160,30 @@ class PncMap {
  private:
   routing::RoutingResponse routing_;
   struct RouteIndex {
+    // Note: 与RoutingResponse中LaneSegment对应的LaneSegment
     LaneSegment segment;
+    // Note: LaneSegment的位置{road_index, passage_index, lane_index}
     std::array<int, 3> index;
   };
+  // Note: 路由结果包含的所有路由段(LaneSegment)&位置信息(road_id, passage_index, lane_id)
   std::vector<RouteIndex> route_indices_;
+  // Note: 有效路由段下标范围[range_start_, range_end_]
+  // Note: range_start_ = std::max(0, adc_route_index_ - 1);
   int range_start_ = 0;
   int range_end_ = 0;
   // routing ids in range
+  // Note: 在有效(no loop)区间范围内的路由结果中包含的Lane Id
   std::unordered_set<std::string> range_lane_ids_;
+  // Note: 路由结果中包含的所有的Lane Id
   std::unordered_set<std::string> all_lane_ids_;
 
   /**
    * The routing request waypoints
    */
   struct WaypointIndex {
+    // Note: waypoint在Lane中的位置信息(s, l)
     LaneWaypoint waypoint;
+    // Note: routing waypoints在route_indices_中的下标
     int index;
     WaypointIndex(const LaneWaypoint &waypoint, int index)
         : waypoint(waypoint), index(index) {}
@@ -183,10 +192,12 @@ class PncMap {
   // return the segment of an index
   int NextWaypointIndex(int index) const;
 
+  // Note: routing waypoints在route_indices_中的下标
   std::vector<WaypointIndex> routing_waypoint_index_;
   /**
    * The next routing request waypoint index in routing_waypoint_index_
    */
+  // Note: 下一个必经点的索引
   std::size_t next_routing_waypoint_index_ = 0;
 
   const hdmap::HDMap *hdmap_ = nullptr;
@@ -195,14 +206,17 @@ class PncMap {
   /**
    * The state of the adc
    */
+  // Note: 自车信息vehicle_state
   common::VehicleState adc_state_;
   /**
    * A three element index: {road_index, passage_index, lane_index}
    */
+  // Note: 自车所在的routing位置(在route_indices_下标位置)
   int adc_route_index_ = -1;
   /**
    * The waypoint of the autonomous driving car
    */
+  // Note: 获取距离自车最近的路由Lane以及自车在该Lane上的投影位置(s)
   LaneWaypoint adc_waypoint_;
 
   /**

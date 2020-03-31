@@ -72,6 +72,7 @@ class EgoInfo {
 
   // stitched point (at stitching mode)
   // or real vehicle point (at non-stitching mode)
+  // Note: 规划起始点(stitched point)
   common::TrajectoryPoint start_point_;
 
   // ego vehicle state

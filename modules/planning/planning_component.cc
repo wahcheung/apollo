@@ -124,6 +124,7 @@ bool PlanningComponent::Proc(
     local_view_.pad_msg = std::make_shared<PadMessage>(pad_msg_);
   }
 
+  // Note: 如果planning所需的必须模块的数据not ready, 不进行规划
   if (!CheckInput()) {
     AERROR << "Input check failed";
     return false;

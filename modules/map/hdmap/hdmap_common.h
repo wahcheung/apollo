@@ -244,6 +244,7 @@ class LaneInfo {
   // 取值范围是[-π, π]
   std::vector<double> headings_;
   // Note: 中心线上的N个点(即points_)形成N-1条线段
+  // Note: 将一条Lane根据points_切割成了N-1段
   std::vector<apollo::common::math::LineSegment2d> segments_;
   // Note: points_中的点对应的累积距离
   // 第一个点，即Lane的中心线其实点的累积距离为0

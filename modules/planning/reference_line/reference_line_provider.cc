@@ -58,6 +58,7 @@ using apollo::hdmap::RouteSegments;
 
 ReferenceLineProvider::~ReferenceLineProvider() {}
 
+// Note: 创建PncMap和参考线Smoother
 ReferenceLineProvider::ReferenceLineProvider(
     const hdmap::HDMap *base_map,
     const std::shared_ptr<relative_map::MapMsg> &relative_map) {
@@ -111,6 +112,7 @@ void ReferenceLineProvider::UpdateVehicleState(
   vehicle_state_ = vehicle_state;
 }
 
+// Note: 为ReferenceLineProvider创建独立的线程
 bool ReferenceLineProvider::Start() {
   if (FLAGS_use_navigation_mode) {
     return true;
@@ -217,6 +219,7 @@ double ReferenceLineProvider::LastTimeDelay() {
   }
 }
 
+// Note: 创建参考线
 bool ReferenceLineProvider::GetReferenceLines(
     std::list<ReferenceLine> *reference_lines,
     std::list<hdmap::RouteSegments> *segments) {

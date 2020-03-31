@@ -359,7 +359,7 @@ void ResultGenerator::AddRoadSegment(
 }
 
 // Note: 将routing结果转换成RoadSegment的表示形式
-// 就是将这些passages按照橫截面变化切割成多段
+// 就是将这些passages按照橫截面变化切割成多段(直行相连的LaneSegment也被切割)
 // 变道时并行的2(或多)条NodeSRange被放到同一个RoadSegment里面
 void ResultGenerator::CreateRoadSegments(
     const std::vector<PassageInfo>& passages, RoutingResponse* result) {

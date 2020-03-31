@@ -82,8 +82,10 @@ Status OnLanePlanning::Init(const PlanningConfig& config) {
                   "planning config error: " + config_.DebugString());
   }
 
+  // Note: 初始化PlanningContext实例，在TaskFactory中注册各类Task
   PlanningBase::Init(config_);
 
+  // Note: 注册各类Planner
   planner_dispatcher_->Init();
 
   CHECK(apollo::cyber::common::GetProtoFromFile(
@@ -104,6 +106,7 @@ Status OnLanePlanning::Init(const PlanningConfig& config) {
 
   // instantiate reference line provider
   reference_line_provider_ = std::make_unique<ReferenceLineProvider>(hdmap_);
+  // Note: 为ReferenceLineProvider创建独立的线程
   reference_line_provider_->Start();
 
   // dispatch planner
@@ -129,6 +132,7 @@ Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
   }
 
   std::list<ReferenceLine> reference_lines;
+  // Note: 相当于routing中passages的概念
   std::list<hdmap::RouteSegments> segments;
   if (!reference_line_provider_->GetReferenceLines(&reference_lines,
                                                    &segments)) {
@@ -263,6 +267,8 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
           FLAGS_trajectory_stitching_preserved_length, true,
           last_publishable_trajectory_.get(), &replan_reason);
 
+  // Note: 更新自车信息(位置/(加)速度//EgoBox)/规划起始点
+  // EgoBox基于自车实际位置而不是stitched point
   EgoInfo::Instance()->Update(stitching_trajectory.back(), vehicle_state);
   const uint32_t frame_num = static_cast<uint32_t>(seq_num_++);
   status = InitFrame(frame_num, stitching_trajectory.back(), vehicle_state);

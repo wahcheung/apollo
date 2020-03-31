@@ -68,6 +68,7 @@ bool RouteSegments::WithinLaneSegment(const routing::LaneSegment &lane_segment,
          lane_segment.end_s() + kSegmentationEpsilon >= waypoint.s;
 }
 
+// Note: 判断waypoint所指示的位置是否在lane_segment中
 bool RouteSegments::WithinLaneSegment(const routing::LaneSegment &lane_segment,
                                       const routing::LaneWaypoint &waypoint) {
   return lane_segment.id() == waypoint.id() &&
