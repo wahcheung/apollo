@@ -68,9 +68,11 @@ const TopoNode* GetLargestNode(const std::vector<const TopoNode*>& nodes) {
   return largest;
 }
 
+// Note: 从后往前检查，尝试将变道的地点往终点方向移动到更合适的位置(更长的Lane)
 bool AdjustLaneChangeBackward(
     std::vector<const TopoNode*>* const result_node_vec) {
   for (int i = static_cast<int>(result_node_vec->size()) - 2; i > 0; --i) {
+    // Note: 行驶路径是base_node->from_node->to_node
     const auto* from_node = result_node_vec->at(i);
     const auto* to_node = result_node_vec->at(i + 1);
     const auto* base_node = result_node_vec->at(i - 1);
@@ -90,6 +92,8 @@ bool AdjustLaneChangeBackward(
     }
     // Note: 只处理变道类型的边(from_node到to_node)
     // Note: 尝试从base_node处开始变道
+    // Note: 检查base_node--(变道)->candidate_node--(直行)->to_node是不是
+    // 比base_node--(直行)->from_node--(变道)->to_node更适合变道
     if (from_to_edge->Type() != TopoEdgeType::TET_FORWARD) {
       // Note: 如果base_node长度比from_node短，
       // 那么原来的从from_node变道到to_node更不容易出错
@@ -99,6 +103,9 @@ bool AdjustLaneChangeBackward(
       }
       std::vector<const TopoNode*> candidate_set;
       candidate_set.push_back(from_node);
+      // Note: 如果base_node是一个origin TopoNode
+      // 则这种获取out_edges的方法会漏掉那些与base_node连接的子TopoNode
+      // 但在黑名单区域内不进行这个变道优化也合理，忽略这样的TopoNode优化也完全OK
       const auto& out_edges = base_node->OutToLeftOrRightEdge();
       for (const auto* edge : out_edges) {
         const auto* candidate_node = edge->ToNode();
@@ -123,9 +130,11 @@ bool AdjustLaneChangeBackward(
   return true;
 }
 
+// Note: 从前往后检查，尝试将变道的地点往起点方向移动到更合适的位置(更长的Lane)
 bool AdjustLaneChangeForward(
     std::vector<const TopoNode*>* const result_node_vec) {
   for (size_t i = 1; i < result_node_vec->size() - 1; ++i) {
+    // Note: 行驶路径是from_node->to_node->base_node
     const auto* from_node = result_node_vec->at(i - 1);
     const auto* to_node = result_node_vec->at(i);
     const auto* base_node = result_node_vec->at(i + 1);
@@ -142,7 +151,9 @@ bool AdjustLaneChangeForward(
              << ", " << to_node->EndS() << ")";
       return false;
     }
-    // Note: 变道类型的边才作处理(from_node->to_node的A*在搜索结果中是变道的)
+    // Note: 变道类型的边才作处理(from_node->to_node)
+    // Note: 检查from_node--(直行)->candidate_node--(变道)->base_node是不是
+    // 比from_node--(变道)->to_node--(直行)->base_node更适合变道
     if (from_to_edge->Type() != TopoEdgeType::TET_FORWARD) {
       if (base_node->EndS() - base_node->StartS() <
           to_node->EndS() - to_node->StartS()) {
@@ -179,10 +190,12 @@ bool AdjustLaneChange(std::vector<const TopoNode*>* const result_node_vec) {
   if (result_node_vec->size() < 3) {
     return true;
   }
+  // Note: 从后往前检查，尝试将变道的地点往终点方向移动到更合适的位置(更长的Lane)
   if (!AdjustLaneChangeBackward(result_node_vec)) {
     AERROR << "Failed to adjust lane change backward";
     return false;
   }
+  // Note: 从前往后检查，尝试将变道的地点往起点方向移动到更合适的位置(更长的Lane)
   if (!AdjustLaneChangeForward(result_node_vec)) {
     AERROR << "Failed to adjust lane change backward";
     return false;
@@ -190,6 +203,8 @@ bool AdjustLaneChange(std::vector<const TopoNode*>* const result_node_vec) {
   return true;
 }
 
+// Note: 根据came_from信息抽取完整的行车路径
+// Note: 对发生变道的路由段做处理，选择前方/后方更长的节点作为变道区间
 bool Reconstruct(
     const std::unordered_map<const TopoNode*, const TopoNode*>& came_from,
     const TopoNode* dest_node, std::vector<NodeWithRange>* result_nodes) {
@@ -202,12 +217,14 @@ bool Reconstruct(
     iter = came_from.find(iter->second);
   }
   std::reverse(result_node_vec.begin(), result_node_vec.end());
+  // Note: 对发生变道的路由段做处理，选择前方/后方更长的节点作为变道区间
   if (!AdjustLaneChange(&result_node_vec)) {
     AERROR << "Failed to adjust lane change";
     return false;
   }
   result_nodes->clear();
   for (const auto* node : result_node_vec) {
+    // Note: result_nodes中的TopoNode都是origin TopoNode
     result_nodes->emplace_back(node->OriginNode(), node->StartS(),
                                node->EndS());
   }
@@ -247,11 +264,8 @@ double AStarStrategy::HeuristicCost(const TopoNode* src_node,
 // 一般来说，dest_node区间范围是[0, end_s + 1cm]
 // 最终输出从src_node到dest_node的NodeWithRange序列
 // 这个result_nodes记录的是从src_node到dest_node经过的LaneSegment
-// 这些LaneSegment从搜索结果的TopoNode中直接获取而来,
-// 如果途径的TopoNode是一个子TopoNode，
-// 则结果中的这个LaneSegment就是子TopoNode表示的区间[start_cut, end_cut]
-// 如果途径的TopoNode是一个origin TopoNode，
-// 则结果中的这个LaneSegment就是origin TopoNode表示的区间[0, length]
+// 这些LaneSegment从搜索结果的TopoNode信息中抽取而来
+// result_nodes中的NodeWithRange里面的TopoNode都是origin TopoNode
 bool AStarStrategy::Search(const TopoGraph* graph,
                            const SubTopoGraph* sub_graph,
                            const TopoNode* src_node, const TopoNode* dest_node,
@@ -279,8 +293,7 @@ bool AStarStrategy::Search(const TopoGraph* graph,
     const auto* from_node = current_node.topo_node;
     // Note: 搜索到终点
     if (current_node.topo_node == dest_node) {
-      // Note: 根据A*结果输出正向的路由结果，
-      // 由于中间对变道做了处理，最终输出的结果可能会与A*结果稍有不同
+      // Note: 根据搜索的中间信息输出路径规划结果
       if (!Reconstruct(came_from_, from_node, result_nodes)) {
         AERROR << "Failed to reconstruct route.";
         return false;
@@ -344,7 +357,7 @@ bool AStarStrategy::Search(const TopoGraph* graph,
         enter_s_[to_node] = to_node->StartS();
       } else {
         // else, add enter_s with FLAGS_min_length_for_lane_change
-        // Note: 变道进入to_node的位置
+        // Note: 估算变道进入to_node的位置
         double to_node_enter_s =
             (enter_s_[from_node] + FLAGS_min_length_for_lane_change) /
             from_node->Length() * to_node->Length();

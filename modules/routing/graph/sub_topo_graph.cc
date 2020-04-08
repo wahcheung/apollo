@@ -34,7 +34,7 @@ bool IsCloseEnough(double s1, double s2) {
   return std::fabs(s1 - s2) < MIN_DIFF_LENGTH;
 }
 
-// Note: 对topo_node的多个NodeSRange区间进行合并和拼接
+// Note: 对topo_node的多个黑名单NodeSRange区间进行合并和拼接
 // [1, 3]和[2, 4]会被合并成[1, 4]
 // [1, 2]和[2, 3]会被拼接成[1, 3]
 void MergeBlockRange(const TopoNode* topo_node,

@@ -124,7 +124,7 @@ TopoNode::TopoNode(const TopoNode* topo_node, const NodeSRange& range)
 
 TopoNode::~TopoNode() {}
 
-// Note: 找lane中心线的中间点作为锚点
+// Note: 找TopoNode对应的LaneSegment中心线的中间点作为锚点
 // 找左右虚线边界最长的range, 并简单地通过长度判断是否足够用于lane change
 void TopoNode::Init() {
   // Note: 将s range中间的点设置为anchor point

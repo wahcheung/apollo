@@ -55,7 +55,7 @@ bool ShowRequestInfo(const RoutingRequest& request, const TopoGraph* graph) {
   return true;
 }
 
-// Note: 获取waypoints对应的TopoNode和在对应Lane中的s
+// Note: 获取waypoints对应的TopoNode，抽取waypoint在对应Lane中的s
 bool GetWayNodes(const RoutingRequest& request, const TopoGraph* graph,
                  std::vector<const TopoNode*>* const way_nodes,
                  std::vector<double>* const way_s) {
@@ -157,6 +157,8 @@ bool Navigator::MergeRoute(
   return true;
 }
 
+// Note: 搜索依次经过所有waypoints的行驶路径
+// result_nodes里面NodeWithRange的TopoNode都是origin TopoNode
 bool Navigator::SearchRouteByStrategy(
     const TopoGraph* graph, const std::vector<const TopoNode*>& way_nodes,
     const std::vector<double>& way_s,
@@ -167,7 +169,7 @@ bool Navigator::SearchRouteByStrategy(
   result_nodes->clear();
   std::vector<NodeWithRange> node_vec;
   // Note: 分段进行路由搜索
-  // Note: 建立拓扑子图，然后进行路由搜索
+  // Note: 在每轮循环中都建立拓扑子图，然后进行路由搜索
   for (size_t i = 1; i < way_nodes.size(); ++i) {
     const auto* way_start = way_nodes[i - 1];
     const auto* way_end = way_nodes[i];
@@ -184,6 +186,8 @@ bool Navigator::SearchRouteByStrategy(
     // 举个例子, [3.21, 3.21]
     // Note: way_start这个TopoNode会产生两个子TopoNode，
     // 分别是[0, way_start_s - 1cm]和[way_start_s - 1cm, length]
+    // 这里单纯就为了将waypoint所在Lane(以及同向车道)分割成两部分子TopoNode
+    // 从而获得搜索起点start和搜索终点end
     black_list_generator_->AddBlackMapFromTerminal(
         way_start, way_end, way_start_s, way_end_s, &full_range_manager);
 
@@ -240,6 +244,7 @@ bool Navigator::SearchRouteByStrategy(
 
 bool Navigator::SearchRoute(const RoutingRequest& request,
                             RoutingResponse* const response) {
+  // Note: 打印routing request信息
   if (!ShowRequestInfo(request, graph_.get())) {
     SetErrorCode(ErrorCode::ROUTING_ERROR_REQUEST,
                  "Error encountered when reading request point!",

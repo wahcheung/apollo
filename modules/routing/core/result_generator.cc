@@ -81,6 +81,7 @@ bool ResultGenerator::ExtractBasicPassages(
   return true;
 }
 
+// Note: 查看from_node是否接入to_nodes，接入点赋值给reachable_node
 bool ResultGenerator::IsReachableFromWithChangeLane(
     const TopoNode* from_node, const PassageInfo& to_nodes,
     NodeWithRange* reachable_node) {
@@ -110,6 +111,7 @@ bool ResultGenerator::IsReachableToWithChangeLane(
   return false;
 }
 
+// Note: 将curr_passage向后扩展，这样做的目的在于延长变道区间
 void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
                                      const PassageInfo& prev_passage,
                                      PassageInfo* const curr_passage) {
@@ -120,6 +122,7 @@ void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
   auto& front_node = curr_passage->nodes.front();
   // if front node starts at middle
   if (!IsCloseEnough(front_node.StartS(), 0.0)) {
+    // Note: front_node没有黑名单
     if (!range_manager.Find(front_node.GetTopoNode())) {
       if (IsCloseEnough(prev_passage.nodes.front().StartS(), 0.0)) {
         front_node.SetStartS(0.0);
@@ -129,6 +132,7 @@ void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
                         front_node.FullLength();
         front_node.SetStartS(temp_s);
       }
+    // Note: front_node有黑名单，无法扩展
     } else {
       return;
     }
@@ -171,7 +175,8 @@ void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
   }
 }
 
-// Note: 这里的逻辑真让人看不懂
+// Note: 将curr_passage向前扩展，扩展的路段需要仍然可以换道到next_passage
+// 这样做的目的在于延长变道区间
 void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
                                     const PassageInfo& next_passage,
                                     PassageInfo* const curr_passage) {
@@ -180,8 +185,10 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
     node_set_of_curr_passage.insert(node.GetTopoNode());
   }
   auto& back_node = curr_passage->nodes.back();
-  // Note: back_node所在的Lane有黑名单导致不是整条Lane都可以通行
+  // Note: back_node所在的Lane的末尾有黑名单导致不是整条Lane都可以通行
+  // 又或者是back_node与终点所在的Lane是并行的
   if (!IsCloseEnough(back_node.EndS(), back_node.FullLength())) {
+    // Note: back_node没有黑名单
     if (!range_manager.Find(back_node.GetTopoNode())) {
       if (IsCloseEnough(next_passage.nodes.back().EndS(),
                         next_passage.nodes.back().FullLength())) {
@@ -192,6 +199,7 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
                         back_node.FullLength();
         back_node.SetEndS(std::min(temp_s, back_node.FullLength()));
       }
+    // Note: back_node有黑名单
     } else {
       return;
     }
@@ -200,8 +208,10 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
   bool allowed_to_explore = true;
   while (allowed_to_explore) {
     std::vector<NodeWithRange> succ_set;
+    // Note: 当前passage最后一个Lane(TopoNode)的forward Lanes
     for (const auto& edge :
          curr_passage->nodes.back().GetTopoNode()->OutToSucEdge()) {
+      // Note: 直行的下一个车道节点(不是left/right neighbour lane)
       const auto& succ_node = edge->ToNode();
       // if succ node has been inserted
       if (ContainsKey(node_set_of_curr_passage, succ_node)) {
@@ -209,14 +219,19 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
       }
       // if next passage is reachable from succ node
       NodeWithRange reachable_node(succ_node, 0, 1.0);
+      // Note: succ_node能换道接入next_passage
+      // Note: reachable_node是next_passage的换道接入区间
       if (IsReachableFromWithChangeLane(succ_node, next_passage,
                                         &reachable_node)) {
         const auto* succ_range = range_manager.Find(succ_node);
+        // Note: succ_node有黑名单，那么只有开头那一段白名单可以扩展
         if (succ_range != nullptr && !succ_range->empty()) {
           double black_s_start = succ_range->front().StartS();
+          // Note: succ_node开头那一段不是黑名单
           if (!IsCloseEnough(black_s_start, 0.0)) {
             succ_set.emplace_back(succ_node, 0.0, black_s_start);
           }
+        // Note: succ_node没有黑名单，可以尽量向前扩展当前passage
         } else {
           if (IsCloseEnough(reachable_node.EndS(),
                             reachable_node.FullLength())) {
@@ -241,6 +256,8 @@ void ResultGenerator::ExtendForward(const TopoRangeManager& range_manager,
   }
 }
 
+// Note: 尝试将passage向前&向后扩展
+// 这样做的目的在于延长变道区间
 void ResultGenerator::ExtendPassages(const TopoRangeManager& range_manager,
                                      std::vector<PassageInfo>* const passages) {
   int passage_num = static_cast<int>(passages->size());
@@ -252,6 +269,8 @@ void ResultGenerator::ExtendPassages(const TopoRangeManager& range_manager,
       ExtendBackward(range_manager, passages->at(i - 1), &(passages->at(i)));
     }
   }
+  // Note: 为什么倒序再来一次呢，画图比较好理解
+  // 通俗地说，A争取赶上前面的B，但B也向前跑了，需要倒叙再对齐一次
   for (int i = passage_num - 1; i >= 0; --i) {
     if (i < passage_num - 1) {
       ExtendForward(range_manager, passages->at(i + 1), &(passages->at(i)));
@@ -304,6 +323,7 @@ void PrintDebugInfo(const std::string& road_id,
   }
 }
 
+// Note: 根据拓扑图的路径搜索结果，输出RoutingResponse
 bool ResultGenerator::GeneratePassageRegion(
     const std::string& map_version, const RoutingRequest& request,
     const std::vector<NodeWithRange>& nodes,
@@ -326,6 +346,7 @@ bool ResultGenerator::GeneratePassageRegion(
   if (!ExtractBasicPassages(nodes, &passages)) {
     return false;
   }
+  // Note: 将passage前后扩展
   ExtendPassages(range_manager, &passages);
 
   CreateRoadSegments(passages, result);
@@ -371,15 +392,11 @@ void ResultGenerator::CreateRoadSegments(
     const auto& curr_nodes = passages[i].nodes;
     for (std::size_t j = 0; j < curr_nodes.size(); ++j) {
       if ((i + 1 < passages.size() &&
-           // Note: 判断passages[i + 1]是否有OutEdge连接到curr_nodes[j]
-           // Note: 判断下一passage能否进入当前节点,
-           // 例如curr_nodes[j]是变道前的passage的最后一个节点?
+           // Note: 当前TopoNode可以进入下一个passage
            IsReachableToWithChangeLane(curr_nodes[j].GetTopoNode(),
                                        passages[i + 1], &fake_node_range)) ||
           (i > 0 &&
-           // Note: 判断passages[i - 1]是否有来自curr_nodes[j]的InEdge
-           // Note: 判断当前节点能够进入上一passage,
-           // 例如curr_nodes[j]是变道后passage的第一个节点?
+           // Note: 当前TopoNode可以从上一passage进入
            IsReachableFromWithChangeLane(curr_nodes[j].GetTopoNode(),
                                          passages[i - 1], &fake_node_range))) {
         if (!in_change_lane) {
@@ -390,6 +407,7 @@ void ResultGenerator::CreateRoadSegments(
         if (in_change_lane) {
           AddRoadSegment(passages, start_index, {i, j}, result);
         }
+        // Note: 让passage中不与前后passage并行的TopoNode都成为独立的一段RoadSegment
         AddRoadSegment(passages, {i, j}, {i, j + 1}, result);
         in_change_lane = false;
       }
