@@ -570,6 +570,7 @@ bool ReferenceLineProvider::CreateReferenceLine(
     std::lock_guard<std::mutex> lock(pnc_map_mutex_);
     if (pnc_map_->IsNewRouting(routing)) {
       is_new_routing = true;
+      // Note: 如果是新的routing请求，更新PnC地图信息
       if (!pnc_map_->UpdateRoutingResponse(routing)) {
         AERROR << "Failed to update routing in pnc map";
         return false;

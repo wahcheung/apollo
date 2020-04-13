@@ -165,16 +165,16 @@ class PncMap {
     // Note: LaneSegment的位置{road_index, passage_index, lane_index}
     std::array<int, 3> index;
   };
-  // Note: 路由结果包含的所有路由段(LaneSegment)&位置信息(road_id, passage_index, lane_id)
+  // Note: RoutingResponse包含的所有路由段(LaneSegment)&位置信息(road_id, passage_index, lane_id)
   std::vector<RouteIndex> route_indices_;
   // Note: 有效路由段下标范围[range_start_, range_end_]
   // Note: range_start_ = std::max(0, adc_route_index_ - 1);
   int range_start_ = 0;
   int range_end_ = 0;
   // routing ids in range
-  // Note: 在有效(no loop)区间范围内的路由结果中包含的Lane Id
+  // Note: 在有效(no loop)区间范围内的RoutingResponse中包含的Lane Id
   std::unordered_set<std::string> range_lane_ids_;
-  // Note: 路由结果中包含的所有的Lane Id
+  // Note: RoutingResponse中包含的所有的Lane Id
   std::unordered_set<std::string> all_lane_ids_;
 
   /**
