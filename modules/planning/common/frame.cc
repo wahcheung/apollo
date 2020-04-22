@@ -164,6 +164,7 @@ bool Frame::CreateReferenceLineInfo(
   auto ref_line_iter = reference_lines.begin();
   auto segments_iter = segments.begin();
   while (ref_line_iter != reference_lines.end()) {
+    // Note: 这个意味着下一个waypoint就是终点
     if (segments_iter->StopForDestination()) {
       is_near_destination_ = true;
     }
@@ -319,6 +320,7 @@ const Obstacle *Frame::CreateStaticVirtualObstacle(const std::string &id,
   return ptr;
 }
 
+// Note: 从local_view_中获取obstacle和traffic_light信息
 Status Frame::Init(
     const std::list<ReferenceLine> &reference_lines,
     const std::list<hdmap::RouteSegments> &segments,
@@ -340,6 +342,7 @@ Status Frame::Init(
 
 Status Frame::InitForOpenSpace() { return InitFrameData(); }
 
+// Note: 添加预测给的obstacles，从local_view_中读取交通灯信息
 Status Frame::InitFrameData() {
   hdmap_ = hdmap::HDMapUtil::BaseMapPtr();
   CHECK_NOTNULL(hdmap_);
@@ -461,6 +464,7 @@ void Frame::AlignPredictionTime(const double planning_start_time,
 
 Obstacle *Frame::Find(const std::string &id) { return obstacles_.Find(id); }
 
+// Note: 添加障碍物，如果同样的ID已经存在，则覆盖原有障碍物信息
 void Frame::AddObstacle(const Obstacle &obstacle) {
   obstacles_.Add(obstacle.Id(), obstacle);
 }
@@ -484,6 +488,7 @@ void Frame::ReadTrafficLights() {
   }
 }
 
+// Note: 查询traffic_light_id对应的交通灯
 perception::TrafficLight Frame::GetSignal(
     const std::string &traffic_light_id) const {
   const auto *result =

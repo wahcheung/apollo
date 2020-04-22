@@ -165,7 +165,7 @@ class PncMap {
     // Note: LaneSegment的位置{road_index, passage_index, lane_index}
     std::array<int, 3> index;
   };
-  // Note: RoutingResponse包含的所有路由段(LaneSegment)&位置信息(road_id, passage_index, lane_id)
+  // Note: RoutingResponse所有路由段(LaneSegment)对应的index信息(road_id, passage_index, lane_id)
   std::vector<RouteIndex> route_indices_;
   // Note: 有效路由段下标范围[range_start_, range_end_]
   // Note: range_start_ = std::max(0, adc_route_index_ - 1);
@@ -192,7 +192,7 @@ class PncMap {
   // return the segment of an index
   int NextWaypointIndex(int index) const;
 
-  // Note: routing waypoints在route_indices_中的下标
+  // Note: waypoints的LaneWaypoint信息&在route_indices_中的索引
   std::vector<WaypointIndex> routing_waypoint_index_;
   /**
    * The next routing request waypoint index in routing_waypoint_index_
@@ -206,17 +206,18 @@ class PncMap {
   /**
    * The state of the adc
    */
-  // Note: 自车信息vehicle_state
+  // Note: 自车状态vehicle_state
   common::VehicleState adc_state_;
   /**
    * A three element index: {road_index, passage_index, lane_index}
    */
   // Note: 自车所在的routing位置(在route_indices_下标位置)
+  // 在UpdateVehicleState中更新
   int adc_route_index_ = -1;
   /**
    * The waypoint of the autonomous driving car
    */
-  // Note: 获取距离自车最近的路由Lane以及自车在该Lane上的投影位置(s)
+  // Note: 距离自车最近的路由Lane以及自车在该Lane上的投影位置(s)
   LaneWaypoint adc_waypoint_;
 
   /**

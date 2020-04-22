@@ -132,8 +132,9 @@ Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
   }
 
   std::list<ReferenceLine> reference_lines;
-  // Note: 相当于routing中passages的概念
+  // Note: RouteSegments相当于routing中Passage的概念
   std::list<hdmap::RouteSegments> segments;
+  // Note: 创建参考线
   if (!reference_line_provider_->GetReferenceLines(&reference_lines,
                                                    &segments)) {
     std::string msg = "Failed to create reference line";
@@ -248,6 +249,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
     last_routing_ = *local_view_.routing;
     History::Instance()->Clear();
     PlanningContext::Instance()->mutable_planning_status()->Clear();
+    // Note: 将RoutingResponse更新到ReferenceLineProvider中
     reference_line_provider_->UpdateRoutingResponse(*local_view_.routing);
     planner_->Init(config_);
   }

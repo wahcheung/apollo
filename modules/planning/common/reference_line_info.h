@@ -269,6 +269,7 @@ class ReferenceLineInfo {
  private:
   static std::unordered_map<std::string, bool> junction_right_of_way_map_;
   const common::VehicleState vehicle_state_;
+  // Note: 规划起始点
   const common::TrajectoryPoint adc_planning_point_;
   ReferenceLine reference_line_;
 
@@ -299,6 +300,7 @@ class ReferenceLineInfo {
    * @brief SL boundary of stitching point (starting point of plan trajectory)
    * relative to the reference line
    */
+  // Note: 规划起始点的Box的SL边界信息
   SLBoundary adc_sl_boundary_;
 
   planning_internal::Debug debug_;
@@ -306,12 +308,14 @@ class ReferenceLineInfo {
 
   hdmap::RouteSegments lanes_;
 
+  // Note: adc_sl_boundary_与当前参考线的Path有重合
   bool is_on_reference_line_ = false;
 
   bool is_path_lane_borrow_ = false;
 
   ADCTrajectory::RightOfWayStatus status_ = ADCTrajectory::UNPROTECTED;
 
+  // Note: 正值表示另一条参考线在左边，否则在右边
   double offset_to_other_reference_line_ = 0.0;
 
   double priority_cost_ = 0.0;
@@ -324,6 +328,7 @@ class ReferenceLineInfo {
    * Overlaps encountered in the first time along the reference line in front of
    * the vehicle
    */
+  // Note: 在InitFirstOverlaps时已经根据距离排序
   std::vector<std::pair<OverlapType, hdmap::PathOverlap>>
       first_encounter_overlaps_;
 

@@ -262,6 +262,7 @@ class Obstacle {
   // for keep_clear usage only
   bool is_blocking_obstacle_ = false;
 
+  // Note: obstacle是否位于reference_line上，挡住通道
   bool is_lane_blocking_ = false;
 
   bool is_lane_change_blocking_ = false;

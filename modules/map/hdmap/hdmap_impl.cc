@@ -66,6 +66,8 @@ int HDMapImpl::LoadMapFromProto(const Map& map_proto) {
     map_ = map_proto;
   }
   for (const auto& lane : map_.lane()) {
+    // Note: LaneInfo初始化做了非常多的处理
+    // 例如提取了中心线上的点(称为中心线采样点)，计算采样点的累计距离/朝向等
     lane_table_[lane.id().id()].reset(new LaneInfo(lane));
   }
   for (const auto& junction : map_.junction()) {
@@ -123,7 +125,7 @@ int HDMapImpl::LoadMapFromProto(const Map& map_proto) {
       }
     }
   }
-  // Note: 将Lane的各种overlap都添加到Lane信息中
+  // Note: 将Lane的各种overlap对象添加到Lane信息中
   for (const auto& lane_ptr_pair : lane_table_) {
     lane_ptr_pair.second->PostProcess(*this);
   }

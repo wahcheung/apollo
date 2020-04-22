@@ -212,6 +212,7 @@ bool ReferenceLineInfo::GetNeighborLaneInfo(
   return true;
 }
 
+// Note: 找车前方最近的Overlap
 bool ReferenceLineInfo::GetFirstOverlap(
     const std::vector<hdmap::PathOverlap>& path_overlaps,
     hdmap::PathOverlap* path_overlap) {
@@ -437,6 +438,8 @@ bool ReferenceLineInfo::IsIrrelevantObstacle(const Obstacle& obstacle) {
   if (obstacle_boundary.end_s() > reference_line_.Length()) {
     return true;
   }
+  // Note: 与自车在同一Lane上但位于自车后方的车辆
+  // TODO(huachang): end_s小于adc的end_s这个判断不是太鲁莽了
   if (is_on_reference_line_ && !IsChangeLanePath() &&
       obstacle_boundary.end_s() < adc_sl_boundary_.end_s() &&
       (reference_line_.IsOnLane(obstacle_boundary) ||
@@ -541,6 +544,7 @@ void ReferenceLineInfo::SetDrivable(bool drivable) { is_drivable_ = drivable; }
 
 bool ReferenceLineInfo::IsDrivable() const { return is_drivable_; }
 
+// Note: 不是自车所在的Path
 bool ReferenceLineInfo::IsChangeLanePath() const {
   return !Lanes().IsOnSegment();
 }

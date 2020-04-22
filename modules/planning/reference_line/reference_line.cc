@@ -58,6 +58,7 @@ ReferenceLine::ReferenceLine(
 
 ReferenceLine::ReferenceLine(const MapPath& hdmap_path)
     : map_path_(hdmap_path) {
+  // Note: 中心线样本点
   for (const auto& point : hdmap_path.path_points()) {
     DCHECK(!point.lane_waypoints().empty());
     const auto& lane_waypoint = point.lane_waypoints()[0];

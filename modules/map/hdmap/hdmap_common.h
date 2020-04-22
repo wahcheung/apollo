@@ -143,6 +143,7 @@ class LaneInfo {
   const Id &road_id() const { return road_id_; }
   const Id &section_id() const { return section_id_; }
   const Lane &lane() const { return lane_; }
+  // Note: Lane中心线的采样点
   const std::vector<apollo::common::math::Vec2d> &points() const {
     return points_;
   }
@@ -235,7 +236,7 @@ class LaneInfo {
  private:
   // Note: 从地图文件中加载的原始Lane数据
   const Lane &lane_;
-  // Note: Lane中心线central_curve上的点
+  // Note: Lane中心线central_curve上的点(经过去重)
   std::vector<apollo::common::math::Vec2d> points_;
   // Note: points_的朝向，实际上是segments_线段的朝向(这个朝向用一个单位向量表示)
   // 中心线最后两个点的朝向都使用最后一段segment的朝向
@@ -245,6 +246,8 @@ class LaneInfo {
   std::vector<double> headings_;
   // Note: 中心线上的N个点(即points_)形成N-1条线段
   // Note: 将一条Lane根据points_切割成了N-1段
+  // Note: 例如points_的点依次是A-B-C-D，
+  // 则形成的segments_是A->B, B->C, C->D
   std::vector<apollo::common::math::LineSegment2d> segments_;
   // Note: points_中的点对应的累积距离
   // 第一个点，即Lane的中心线其实点的累积距离为0
@@ -265,6 +268,7 @@ class LaneInfo {
   // Note: Lane中心线的长度
   double total_length_ = 0.0;
   // Note: Lane左边界的SampledWidth，记录某个s处的中心线到Lane左边界的距离
+  // 边界距离的样本直接从地图原始信息中读取，没有任何其他处理
   std::vector<SampledWidth> sampled_left_width_;
   // Note: Lane右边界的SampledWidth，记录某个s处的中心线到右边界的距离
   std::vector<SampledWidth> sampled_right_width_;

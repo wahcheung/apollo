@@ -348,23 +348,37 @@ class Path {
                       std::vector<PathOverlap>* const overlaps) const;
 
  protected:
+ // Note: 中心线样本点数量
   int num_points_ = 0;
+  // Note: 等于num_points_ - 1
   int num_segments_ = 0;
+  // Note: 中心线样本点
   std::vector<MapPathPoint> path_points_;
+  // Note: 同Lane的LaneSegment合并后形成的LaneSegment列表
   std::vector<LaneSegment> lane_segments_;
+  // Note: lane_segments_中每个LaneSegment(Lane)末点的累计距离累加
   std::vector<double> lane_accumulated_s_;
+  // Note: 采样点path_points_形成的LaneSegment
+  // 这个与segments_很像，但注意两者存的信息不一样的
   std::vector<LaneSegment> lane_segments_to_next_point_;
   std::vector<common::math::Vec2d> unit_directions_;
+  // Note: 中心线长度，等于最后一个样本点的累计距离
   double length_ = 0.0;
+  // Note: 中心线样本点的累计距离
   std::vector<double> accumulated_s_;
+  // Note: 4个样本点A->B->C->D会形成三个LineSegment2d
+  // 分别是A->B, B->C, C->D
+  // Note: segments_[k]存放的是path_points_[k]->path_points_[k + 1]的线段
   std::vector<common::math::LineSegment2d> segments_;
   bool use_path_approximation_ = false;
   PathApproximation approximation_;
 
   // Sampled every fixed length.
   int num_sample_points_ = 0;
+  // Note: 均匀采样点处的Lane的左右宽度
   std::vector<double> lane_left_width_;
   std::vector<double> lane_right_width_;
+  // Note: 均匀采样点处的Road的左右宽度
   std::vector<double> road_left_width_;
   std::vector<double> road_right_width_;
   std::vector<int> last_point_index_;

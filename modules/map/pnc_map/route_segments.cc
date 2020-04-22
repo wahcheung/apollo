@@ -155,6 +155,7 @@ bool RouteSegments::GetProjection(const common::PointENU &point_enu,
   return GetProjection({point_enu.x(), point_enu.y()}, sl_point, waypoint);
 }
 
+// Note: 两个RouteSegments有交集
 bool RouteSegments::IsConnectedSegment(const RouteSegments &other) const {
   if (empty() || other.empty()) {
     return false;

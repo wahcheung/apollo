@@ -211,6 +211,7 @@ class Frame {
   const ReferenceLineInfo *drive_reference_line_info_ = nullptr;
 
   ThreadSafeIndexedObstacles obstacles_;
+  // Note: local_view_中读取的交通灯信息
   std::unordered_map<std::string, const perception::TrafficLight *>
       traffic_lights_;
 

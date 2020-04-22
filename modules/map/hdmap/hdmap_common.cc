@@ -73,6 +73,7 @@ void RemoveDuplicates(std::vector<Vec2d> *points) {
   points->resize(count);
 }
 
+// Note: 将input_curve中的点提取出来并去重，放到points
 void PointsFromCurve(const Curve &input_curve, std::vector<Vec2d> *points) {
   RETURN_IF_NULL(points);
   points->clear();
@@ -130,6 +131,7 @@ PointENU PointFromVec2d(const Vec2d &point) {
 LaneInfo::LaneInfo(const Lane &lane) : lane_(lane) { Init(); }
 
 void LaneInfo::Init() {
+  // Note: 提取中心点并去重
   PointsFromCurve(lane_.central_curve(), &points_);
   CHECK_GE(points_.size(), 2);
   segments_.clear();

@@ -95,6 +95,7 @@ bool ReferenceLineProvider::UpdateRoutingResponse(
   return true;
 }
 
+// Note: ego尚未通过(将来会路过)的waypoints
 std::vector<routing::LaneWaypoint>
 ReferenceLineProvider::FutureRouteWaypoints() {
   if (!FLAGS_use_navigation_mode) {
@@ -268,6 +269,7 @@ bool ReferenceLineProvider::GetReferenceLines(
   return true;
 }
 
+// Note: 将route_segments倒序
 void ReferenceLineProvider::PrioritzeChangeLane(
     std::list<hdmap::RouteSegments> *route_segments) {
   CHECK_NOTNULL(route_segments);
@@ -535,6 +537,8 @@ bool ReferenceLineProvider::CreateRouteSegments(
     std::list<hdmap::RouteSegments> *segments) {
   {
     std::lock_guard<std::mutex> lock(pnc_map_mutex_);
+    // Note: 对自车所在的Passage和邻近的可驶入的Passage进行扩展
+    // 变道时segments有两个元素(连续变道有多个元素)，常规Lane Follow只有一个元素
     if (!pnc_map_->GetRouteSegments(vehicle_state, segments)) {
       AERROR << "Failed to extract segments from routing";
       return false;
@@ -578,23 +582,30 @@ bool ReferenceLineProvider::CreateReferenceLine(
     }
   }
 
+  // Note: 对每一个RouteSegments进行前后扩展
+  // 扩展后的RouteSegments将用于生成参考线
+  // Note: Routing中的Passage概念等同于这里的RouteSegments
   if (!CreateRouteSegments(vehicle_state, segments)) {
     AERROR << "Failed to create reference line from routing";
     return false;
   }
   if (is_new_routing || !FLAGS_enable_reference_line_stitching) {
+    // Note: 对每一个Passage做平滑，生成参考线
     for (auto iter = segments->begin(); iter != segments->end();) {
       reference_lines->emplace_back();
+      // Note: 对Passage做平滑，生成平滑的参考线
       if (!SmoothRouteSegment(*iter, &reference_lines->back())) {
         AERROR << "Failed to create reference line from route segments";
         reference_lines->pop_back();
         iter = segments->erase(iter);
       } else {
+        // Note: 自车的SL
         common::SLPoint sl;
         if (!reference_lines->back().XYToSL(vehicle_state, &sl)) {
           AWARN << "Failed to project point: {" << vehicle_state.x() << ","
                 << vehicle_state.y() << "} to stitched reference line";
         }
+        // Note: 尝试对参考线进行收缩，如果参考线收缩了，那segments也会被收缩
         Shrink(sl, &reference_lines->back(), &(*iter));
         ++iter;
       }
@@ -719,6 +730,8 @@ bool ReferenceLineProvider::Shrink(const common::SLPoint &sl,
     need_shrink = true;
   }
   // check heading
+  // Note: 前方朝向如果变化太大，则将超过阈值朝向的点后面的参考线部分删掉
+  // Note: 自车(sl)最近邻前置参考点
   const auto index = reference_line->GetNearestReferenceIndex(sl.s());
   const auto &ref_points = reference_line->reference_points();
   const double cur_heading = ref_points[index].heading();
@@ -736,6 +749,7 @@ bool ReferenceLineProvider::Shrink(const common::SLPoint &sl,
     new_forward_distance = forward_sl.s() - sl.s();
   }
   if (need_shrink) {
+    // Note: 切割
     if (!reference_line->Segment(sl.s(), new_backward_distance,
                                  new_forward_distance)) {
       AWARN << "Failed to shrink reference line";
@@ -748,6 +762,7 @@ bool ReferenceLineProvider::Shrink(const common::SLPoint &sl,
   return true;
 }
 
+// Note: 检查平滑后的参考线是否偏离原始参考线(即道路中心线)太远
 bool ReferenceLineProvider::IsReferenceLineSmoothValid(
     const ReferenceLine &raw, const ReferenceLine &smoothed) const {
   static constexpr double kReferenceLineDiffCheckStep = 10.0;
@@ -797,6 +812,7 @@ AnchorPoint ReferenceLineProvider::GetAnchorPoint(
 
   // shrink width by vehicle width, curb
   double safe_lane_width = left_width + right_width;
+  // Note: 路面冗余宽度
   safe_lane_width -= adc_width;
   bool is_lane_width_safe = true;
 
@@ -807,8 +823,11 @@ AnchorPoint ReferenceLineProvider::GetAnchorPoint(
     is_lane_width_safe = false;
   }
 
+  // Note: 遇到马路路沿/花圃/护栏之类的边界，将行驶中心远离这些边沿
   double center_shift = 0.0;
   if (hdmap::RightBoundaryType(waypoint) == hdmap::LaneBoundaryType::CURB) {
+    // Note: 冗余宽度收窄，缩小curb_shift的话，冗余区间的中心的偏移量是0.5*curb_shift
+    // 画个图会更直观好理解
     safe_lane_width -= smoother_config_.curb_shift();
     if (safe_lane_width < kEpislon) {
       ADEBUG << "lane width smaller than adc width and right curb shift";
@@ -840,6 +859,7 @@ AnchorPoint ReferenceLineProvider::GetAnchorPoint(
     effective_width = 0.5 * safe_lane_width;
   }
 
+  // Note: 根据横向偏移量重置中心参考点
   ref_point += left_vec * center_shift;
   anchor.path_point = ref_point.ToPathPoint(s);
   anchor.lateral_bound = common::math::Clamp(
@@ -872,6 +892,9 @@ void ReferenceLineProvider::GetAnchorPoints(
 
 bool ReferenceLineProvider::SmoothRouteSegment(const RouteSegments &segments,
                                                ReferenceLine *reference_line) {
+  // Note: Path的构造初始化做了极其多的工作，把Passage中的Lane的信息都整合了一番，
+  // 能提供非常丰富的数据接口
+  // 可以认为，Path就是将Passage看作一条Lane了，用于提供Passage上的各种细节信息
   hdmap::Path path(segments);
   return SmoothReferenceLine(ReferenceLine(path), reference_line);
 }
@@ -926,6 +949,8 @@ bool ReferenceLineProvider::SmoothReferenceLine(
   }
   // generate anchor points:
   std::vector<AnchorPoint> anchor_points;
+  // Note: 根据Lane左右边界的类型合理地对中心线参考点做一定的偏移，远离路沿
+  // 计算中心点的可行区域(中心点位置+宽度 的形式)
   GetAnchorPoints(raw_reference_line, &anchor_points);
   smoother_->SetAnchorPoints(anchor_points);
   if (!smoother_->Smooth(raw_reference_line, reference_line)) {
