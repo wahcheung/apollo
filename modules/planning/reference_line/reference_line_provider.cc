@@ -59,6 +59,10 @@ using apollo::hdmap::RouteSegments;
 ReferenceLineProvider::~ReferenceLineProvider() {}
 
 // Note: 创建PncMap和参考线Smoother
+// Note: 这个构造函数只在OnLanePlanning初始化(Init)时调用
+// 而OnLanePlanning初始化只在PlanningComponent初始化(Init)时进行一次
+// 因此ReferenceLineProvider只构造一次
+// 由于PncMap也是在这里创建，因此PncMap也只是创建一次
 ReferenceLineProvider::ReferenceLineProvider(
     const hdmap::HDMap *base_map,
     const std::shared_ptr<relative_map::MapMsg> &relative_map) {
@@ -87,6 +91,7 @@ ReferenceLineProvider::ReferenceLineProvider(
   is_initialized_ = true;
 }
 
+// Note: OnLanePlanning::RunOnce中检测到新的routing出现时会调用这个接口
 bool ReferenceLineProvider::UpdateRoutingResponse(
     const routing::RoutingResponse &routing) {
   std::lock_guard<std::mutex> routing_lock(routing_mutex_);
@@ -107,6 +112,7 @@ ReferenceLineProvider::FutureRouteWaypoints() {
   return std::vector<routing::LaneWaypoint>();
 }
 
+// Note: 每轮规划(OnLanePlanning::RunOnce)都会通过这个接口更新自车状态
 void ReferenceLineProvider::UpdateVehicleState(
     const VehicleState &vehicle_state) {
   std::lock_guard<std::mutex> lock(vehicle_state_mutex_);
@@ -220,7 +226,8 @@ double ReferenceLineProvider::LastTimeDelay() {
   }
 }
 
-// Note: 创建参考线
+// Note: 创建参考线，这个接口对外提供参考线
+// OnLanePlanning通过这个接口获取参考线
 bool ReferenceLineProvider::GetReferenceLines(
     std::list<ReferenceLine> *reference_lines,
     std::list<hdmap::RouteSegments> *segments) {
@@ -538,7 +545,8 @@ bool ReferenceLineProvider::CreateRouteSegments(
   {
     std::lock_guard<std::mutex> lock(pnc_map_mutex_);
     // Note: 对自车所在的Passage和邻近的可驶入的Passage进行扩展
-    // 变道时segments有两个元素(连续变道有多个元素)，常规Lane Follow只有一个元素
+    // 变道时segments有两个元素(自车所在Passage和待进入的Passage)，常规的Lane Follow只有一个元素
+    // Note: 即使是连续变道，也只有自车所在Passage和待进入的Passage会被返回
     if (!pnc_map_->GetRouteSegments(vehicle_state, segments)) {
       AERROR << "Failed to extract segments from routing";
       return false;
@@ -546,6 +554,7 @@ bool ReferenceLineProvider::CreateRouteSegments(
   }
 
   if (FLAGS_prioritize_change_lane) {
+    // Note: segments倒序
     PrioritzeChangeLane(segments);
   }
   return !segments->empty();
@@ -574,7 +583,9 @@ bool ReferenceLineProvider::CreateReferenceLine(
     std::lock_guard<std::mutex> lock(pnc_map_mutex_);
     if (pnc_map_->IsNewRouting(routing)) {
       is_new_routing = true;
-      // Note: 如果是新的routing请求，更新PnC地图信息
+      // Note: 当IsNewRouting，更新路由信息
+      // 剥离routing结果，建立路由段索引(路由段在RoutingResponse中的索引)
+      // 获取有效路由段区间，获取request中的waypoints的路由段索引
       if (!pnc_map_->UpdateRoutingResponse(routing)) {
         AERROR << "Failed to update routing in pnc map";
         return false;
@@ -585,6 +596,7 @@ bool ReferenceLineProvider::CreateReferenceLine(
   // Note: 对每一个RouteSegments进行前后扩展
   // 扩展后的RouteSegments将用于生成参考线
   // Note: Routing中的Passage概念等同于这里的RouteSegments
+  // Note: 扩展的路由段将用来生成参考线
   if (!CreateRouteSegments(vehicle_state, segments)) {
     AERROR << "Failed to create reference line from routing";
     return false;

@@ -354,6 +354,7 @@ bool ResultGenerator::GeneratePassageRegion(
   return true;
 }
 
+// Note: <first, second> 指 <passage_index, segment_index>
 void ResultGenerator::AddRoadSegment(
     const std::vector<PassageInfo>& passages,
     const std::pair<std::size_t, std::size_t>& start,
@@ -374,6 +375,7 @@ void ResultGenerator::AddRoadSegment(
       passage->set_can_exit(true);
     } else {
       passage->set_change_lane_type(passages[i].change_lane_type);
+      // Note: 变道的最后一个passage是can_exit的
       passage->set_can_exit(i == end.first);
     }
   }

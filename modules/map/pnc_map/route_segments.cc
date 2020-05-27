@@ -107,6 +107,7 @@ const LaneWaypoint &RouteSegments::RouteEndWaypoint() const {
   return route_end_waypoint_;
 }
 
+// Note: 自车是否在当前Passage
 bool RouteSegments::IsOnSegment() const { return is_on_segment_; }
 
 void RouteSegments::SetIsOnSegment(bool on_segment) {

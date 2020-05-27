@@ -159,15 +159,17 @@ class PncMap {
 
  private:
   routing::RoutingResponse routing_;
+  // Note: 路由段及其在RoutingResponse中的索引
   struct RouteIndex {
     // Note: 与RoutingResponse中LaneSegment对应的LaneSegment
     LaneSegment segment;
     // Note: LaneSegment的位置{road_index, passage_index, lane_index}
     std::array<int, 3> index;
   };
+  // Note: 路由段索引
   // Note: RoutingResponse所有路由段(LaneSegment)对应的index信息(road_id, passage_index, lane_id)
   std::vector<RouteIndex> route_indices_;
-  // Note: 有效路由段下标范围[range_start_, range_end_]
+  // Note: 有效路由段下标范围[range_start_, range_end_)
   // Note: range_start_ = std::max(0, adc_route_index_ - 1);
   int range_start_ = 0;
   int range_end_ = 0;
@@ -218,16 +220,20 @@ class PncMap {
    * The waypoint of the autonomous driving car
    */
   // Note: 距离自车最近的路由Lane以及自车在该Lane上的投影位置(s)
+  // 自车(VehicleState)所在路由位置(路由Lane和s)
+  // Note: 表示的是adc_state_的路由位置信息
   LaneWaypoint adc_waypoint_;
 
   /**
    * @brief Indicates whether the adc should start consider destination.
    * In a looped routing, the vehicle may need to pass by the destination
    * point
-   * may times on the road, but only need to stop when it encounters
+   * many times on the road, but only need to stop when it encounters
    * destination
    * for the last time.
    */
+  // Note: 下一个要到的waypoint就是终点处的waypoint
+  // Note: 即将抵达终点，下一个waypoint就是终点了
   bool stop_for_destination_ = false;
 
   FRIEND_TEST(PncMapTest, UpdateRouting);

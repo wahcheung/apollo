@@ -75,6 +75,7 @@ OnLanePlanning::~OnLanePlanning() {
 
 std::string OnLanePlanning::Name() const { return "on_lane_planning"; }
 
+// Note: 只在PlanningComponent初始化时执行一次
 Status OnLanePlanning::Init(const PlanningConfig& config) {
   config_ = config;
   if (!CheckPlanningConfig(config_)) {
@@ -83,6 +84,7 @@ Status OnLanePlanning::Init(const PlanningConfig& config) {
   }
 
   // Note: 初始化PlanningContext实例，在TaskFactory中注册各类Task
+  // 加载default_task_config
   PlanningBase::Init(config_);
 
   // Note: 注册各类Planner
@@ -196,6 +198,7 @@ void OnLanePlanning::GenerateStopTrajectory(ADCTrajectory* ptr_trajectory_pb) {
 void OnLanePlanning::RunOnce(const LocalView& local_view,
                              ADCTrajectory* const ptr_trajectory_pb) {
   local_view_ = local_view;
+  // Note: ptr_trajectory_pb中header的时间戳
   const double start_timestamp = Clock::NowInSeconds();
   const double start_system_timestamp =
       std::chrono::duration<double>(
@@ -233,6 +236,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
     status.Save(ptr_trajectory_pb->mutable_header()->mutable_status());
     // TODO(all): integrate reverse gear
     ptr_trajectory_pb->set_gear(canbus::Chassis::GEAR_DRIVE);
+    // Note: 填充header的时间戳
     FillPlanningPb(start_timestamp, ptr_trajectory_pb);
     GenerateStopTrajectory(ptr_trajectory_pb);
     return;
@@ -285,6 +289,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   }
   ptr_trajectory_pb->mutable_latency_stats()->set_init_frame_time_ms(
       Clock::NowInSeconds() - start_timestamp);
+  // Note: Frame初始化失败，触发紧急停车
   if (!status.ok()) {
     AERROR << status.ToString();
     if (FLAGS_publish_estop) {
@@ -314,6 +319,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
     return;
   }
 
+  // Note: 处理交通规则
   for (auto& ref_line_info : *frame_->mutable_reference_line_info()) {
     TrafficDecider traffic_decider;
     traffic_decider.Init(traffic_rule_configs_);

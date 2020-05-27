@@ -68,6 +68,7 @@ std::string LaneWaypoint::DebugString() const {
   return absl::StrCat("id = ", lane->id().id(), "  s = ", s);
 }
 
+// Note: 这里判断边界类型的逻辑有点奇怪
 LaneBoundaryType::Type LeftBoundaryType(const LaneWaypoint& waypoint) {
   if (!waypoint.lane) {
     return LaneBoundaryType::UNKNOWN;

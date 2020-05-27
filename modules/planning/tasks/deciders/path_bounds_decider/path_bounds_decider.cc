@@ -514,6 +514,7 @@ Status PathBoundsDecider::GeneratePullOverPathBound(
 Status PathBoundsDecider::GenerateFallbackPathBound(
     const ReferenceLineInfo& reference_line_info, PathBound* const path_bound) {
   // 1. Initialize the path boundaries to be an indefinitely large area.
+  // Note: 从ADC所在s处开始，间隔0.5米，初始化前方100米长度的boundary为无穷大
   if (!InitPathBoundary(reference_line_info, path_bound)) {
     const std::string msg = "Failed to initialize fallback path boundaries.";
     AERROR << msg;
@@ -877,6 +878,8 @@ bool PathBoundsDecider::IsContained(
   return true;
 }
 
+// Note: 初始化path_bound，包括长度、宽度和采样间隔
+// 从ADC所在s处开始，间隔0.5米，初始化前方100米长度的boundary为无穷大
 bool PathBoundsDecider::InitPathBoundary(
     const ReferenceLineInfo& reference_line_info, PathBound* const path_bound) {
   // Sanity checks.
@@ -953,6 +956,7 @@ bool PathBoundsDecider::GetBoundaryFromRoads(
     }
   }
 
+  // Note: 剪去堵塞点(包含)后面的采样点
   TrimPathBounds(path_blocked_idx, path_bound);
   return true;
 }
@@ -1047,6 +1051,7 @@ bool PathBoundsDecider::GetBoundaryFromLanes(
       break;
     }
   }
+  // Note: 剪去堵塞点(包含)后面的采样点
   TrimPathBounds(path_blocked_idx, path_bound);
 
   if (lane_borrow_info == LaneBorrowInfo::NO_BORROW) {
@@ -1066,6 +1071,7 @@ bool PathBoundsDecider::GetBoundaryFromADC(
 
   // Calculate the ADC's lateral boundary.
   static constexpr double kMaxLateralAccelerations = 1.5;
+  // Note: 最大横向减速度的停车偏移
   double ADC_lat_decel_buffer = (adc_frenet_ld_ > 0 ? 1.0 : -1.0) *
                                 adc_frenet_ld_ * adc_frenet_ld_ /
                                 kMaxLateralAccelerations / 2.0;
@@ -1103,6 +1109,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
   // ADC's position.
   double past_lane_left_width = adc_lane_width_ / 2.0;
   double past_lane_right_width = adc_lane_width_ / 2.0;
+  // Note: 被堵塞的采样点下标
   int path_blocked_idx = -1;
   bool borrowing_reverse_lane = false;
   for (size_t i = 0; i < path_bound->size(); ++i) {
@@ -1165,6 +1172,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
     double offset_to_map = 0.0;
     reference_line.GetOffsetToMap(curr_s, &offset_to_map);
 
+    // Note: 最大横向减速度的停车偏移
     double ADC_speed_buffer = (adc_frenet_ld_ > 0 ? 1.0 : -1.0) *
                               adc_frenet_ld_ * adc_frenet_ld_ /
                               kMaxLateralAccelerations / 2.0;
@@ -1199,15 +1207,18 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
 
     // 4. Update the boundary.
     double dummy = 0.0;
+    // Note: 堵塞点的边界不被更新
     if (!UpdatePathBoundaryAndCenterLine(i, curr_left_bound, curr_right_bound,
                                          path_bound, &dummy)) {
       path_blocked_idx = static_cast<int>(i);
     }
+    // Note: 通道被堵塞，退出后续采样
     if (path_blocked_idx != -1) {
       break;
     }
   }
 
+  // Note: 剪去堵塞点(包含)后面的采样点
   TrimPathBounds(path_blocked_idx, path_bound);
 
   if (lane_borrow_info == LaneBorrowInfo::NO_BORROW) {
@@ -1693,6 +1704,7 @@ std::vector<std::vector<bool>> PathBoundsDecider::DecidePassDirections(
   return decisions;
 }
 
+// Note: 目前就是简单返回自车半个宽度
 double PathBoundsDecider::GetBufferBetweenADCCenterAndEdge() {
   double adc_half_width =
       VehicleConfigHelper::GetConfig().vehicle_param().width() / 2.0;
@@ -1703,6 +1715,8 @@ double PathBoundsDecider::GetBufferBetweenADCCenterAndEdge() {
   return (adc_half_width + kAdcEdgeBuffer);
 }
 
+// Note: 更新ADC中心点的左右boundary和中线
+// 如果该采样点处不能通行，则不做任何更新处理并返回false
 bool PathBoundsDecider::UpdatePathBoundaryAndCenterLine(
     size_t idx, double left_bound, double right_bound,
     PathBound* const path_boundaries, double* const center_line) {
@@ -1729,6 +1743,8 @@ bool PathBoundsDecider::UpdatePathBoundaryAndCenterLine(
   return true;
 }
 
+// Note: 更新ADC中心点的左右boundary
+// 如果该采样点处不能通行，则不做任何更新处理并返回false
 bool PathBoundsDecider::UpdatePathBoundary(size_t idx, double left_bound,
                                            double right_bound,
                                            PathBound* const path_boundaries) {
@@ -1751,6 +1767,7 @@ bool PathBoundsDecider::UpdatePathBoundary(size_t idx, double left_bound,
   return true;
 }
 
+// Note: 将堵塞点以及后续的采样点全部剪去
 void PathBoundsDecider::TrimPathBounds(const int path_blocked_idx,
                                        PathBound* const path_boundaries) {
   if (path_blocked_idx != -1) {

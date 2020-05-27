@@ -51,8 +51,10 @@ enum ChangeLaneType {
 message Passage {
   repeated LaneSegment segment = 1;
   // Note: whether the passage can lead to another passage in routing
+  // Note: 可以理解为是否能从passage的末点退出该passage
   optional bool can_exit = 2;
   // Note: 当前passage如何进入下一个passage
+  // Note: 非FORWARD类型的Passage就不能exit，所以那个can_exit字段挺多余的
   optional ChangeLaneType change_lane_type = 3 [default = FORWARD];
 }
 

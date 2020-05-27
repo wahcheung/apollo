@@ -464,6 +464,7 @@ const std::vector<ReferencePoint>& ReferenceLine::reference_points() const {
 
 const MapPath& ReferenceLine::map_path() const { return map_path_; }
 
+// Note: 这个是获取的是Lane的左右宽度还是相对于参考线的左右宽度?
 bool ReferenceLine::GetLaneWidth(const double s, double* const lane_left_width,
                                  double* const lane_right_width) const {
   if (map_path_.path_points().empty()) {
@@ -476,6 +477,10 @@ bool ReferenceLine::GetLaneWidth(const double s, double* const lane_left_width,
   return true;
 }
 
+// Note: 这个offset的正负的比较基准是什么?(Lane or ReferenceLine)
+// 观察PathBoundsDecider::InitPathBoundsDecider中对这个接口的调用，
+// 猜测作者原意是以Lane作为基准，
+// 如果ReferenceLine在Lane中心线左边则l_offset为正，反之为负
 bool ReferenceLine::GetOffsetToMap(const double s, double* l_offset) const {
   if (map_path_.path_points().empty()) {
     return false;

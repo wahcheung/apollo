@@ -47,6 +47,7 @@ namespace hdmap {
  * This class contains the original data that can be used to generate
  * hdmap::Path.
  **/
+// Note: RouteSegments相当于RoutingResponse中Passage的概念
 class RouteSegments : public std::vector<LaneSegment> {
  public:
   /**
@@ -208,11 +209,13 @@ class RouteSegments : public std::vector<LaneSegment> {
   /**
    * whether this segment can lead to another passage region in routing
    */
+  // Note: 这个RouteSegments表示的Passage的can_exit字段
   bool can_exit_ = false;
 
   /**
    * Indicates whether the vehicle is on current RouteSegment.
    **/
+  // Note: 自车在当前Passage上
   bool is_on_segment_ = false;
 
   /**
@@ -221,8 +224,10 @@ class RouteSegments : public std::vector<LaneSegment> {
    **/
   bool is_neighbor_ = false;
 
+  // Note: 这个RouteSegments表示的Passage的change_lane_type字段
   routing::ChangeLaneType next_action_ = routing::FORWARD;
 
+  // Note: 由上一条Passage进入当前Passage的方式
   routing::ChangeLaneType previous_action_ = routing::FORWARD;
 
   std::string id_;

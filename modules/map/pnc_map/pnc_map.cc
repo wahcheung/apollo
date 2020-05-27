@@ -87,7 +87,7 @@ LaneSegment PncMap::ToLaneSegment(const routing::LaneSegment &segment) const {
 
 // Note: 基于自车位置，查找自车下一个将要经过的waypoint在routing_waypoint_index_中索引
 // 即更新next_routing_waypoint_index_
-// Note: 传入的cur_index是自车投影点在route_indices_的索引
+// Note: 传入的cur_index是自车的路由索引
 void PncMap::UpdateNextRoutingWaypointIndex(int cur_index) {
   if (cur_index < 0) {
     next_routing_waypoint_index_ = 0;
@@ -97,10 +97,10 @@ void PncMap::UpdateNextRoutingWaypointIndex(int cur_index) {
     next_routing_waypoint_index_ = routing_waypoint_index_.size() - 1;
     return;
   }
-  // Note: 下面的流程感觉可以简化成从next_routing_waypoint_index_置为0然后开始搜索
 
   // Search backwards when the car is driven backward on the route.
-  // Note: 例如接管状态下，自车倒车，这时候就需要后向寻找?
+  // Note: 先退到自车后面的waypoint
+  // Note: 例如接管状态下，自车倒车，这时候就需要后向寻找
   while (next_routing_waypoint_index_ != 0 &&
          next_routing_waypoint_index_ < routing_waypoint_index_.size() &&
          routing_waypoint_index_[next_routing_waypoint_index_].index >
@@ -116,13 +116,13 @@ void PncMap::UpdateNextRoutingWaypointIndex(int cur_index) {
     --next_routing_waypoint_index_;
   }
   // Search forwards
-  // Note: next_routing_waypoint_index_必须在cur_index前面(或相同)
+  // Note: 下一waypoint的路由索引显然不应该比自车所在路由段的索引小
   while (next_routing_waypoint_index_ < routing_waypoint_index_.size() &&
          routing_waypoint_index_[next_routing_waypoint_index_].index <
              cur_index) {
     ++next_routing_waypoint_index_;
   }
-  // Note: next_routing_waypoint_index_所在的LaneSegment可能有多个waypoint
+  // Note: 下一waypoint在自车所在的LaneSegment，这个LaneSegment可能有多个waypoint
   // 需要找到s比自车位置大的waypoint
   while (next_routing_waypoint_index_ < routing_waypoint_index_.size() &&
          cur_index ==
@@ -143,6 +143,12 @@ std::vector<routing::LaneWaypoint> PncMap::FutureRouteWaypoints() const {
 }
 
 // Note: 获取没有loop的路由区间[adc_index - 1, range_end_]
+// Note: 从adc_index开始，出现重复的Lane Id就截断
+// Note: 如果RoutingResponse中的线路多次经过同一条Lane
+// 例如路由结果: A --> B --> C --> D --> B --> E
+// 虽然这里做了截断处理，规划实际上还是能按照Routing结果走完全程的
+// 开始的有效range为A->B->C->D，当adc_index越过B时，
+// 有效range更新为C --> D --> B --> E
 void PncMap::UpdateRoutingRange(int adc_index) {
   // Track routing range.
   range_lane_ids_.clear();
@@ -166,6 +172,7 @@ bool PncMap::UpdateVehicleState(const VehicleState &vehicle_state) {
     AERROR << "The routing is invalid when updating vehicle state.";
     return false;
   }
+  // Note: 由下面的赋值操作，adc_state_就是上一轮的vehicle_state?
   if (!adc_state_.has_x() ||
       (common::util::DistanceXY(adc_state_, vehicle_state) >
        FLAGS_replan_lateral_distance_threshold +
@@ -178,6 +185,7 @@ bool PncMap::UpdateVehicleState(const VehicleState &vehicle_state) {
 
   adc_state_ = vehicle_state;
   // Note: 获取距离自车最近的路由Lane以及自车在该Lane上的投影位置(s)
+  // 即判断当前自车处于全局路由中的什么位置(adc_waypoint_)
   // Note: The waypoint of the autonomous driving car
   if (!GetNearestPointFromRouting(vehicle_state, &adc_waypoint_)) {
     AERROR << "Failed to get waypoint from routing with point: "
@@ -185,7 +193,7 @@ bool PncMap::UpdateVehicleState(const VehicleState &vehicle_state) {
            << vehicle_state.z() << ").";
     return false;
   }
-  // Note: 找自车在route_indices_的索引
+  // Note: 找自车(VehicleState)在route_indices_的索引
   int route_index = GetWaypointIndex(adc_waypoint_);
   if (route_index < 0 ||
       route_index >= static_cast<int>(route_indices_.size())) {
@@ -197,7 +205,7 @@ bool PncMap::UpdateVehicleState(const VehicleState &vehicle_state) {
   // Note: 查找下一个要经过的waypoint的Index, 更新next_routing_waypoint_index_
   // Note: 下一个必经点的索引
   UpdateNextRoutingWaypointIndex(route_index);
-  // Note: 更新ADC在route_indices_的索引
+  // Note: 更新自车(VehicleState)在route_indices_的索引
   adc_route_index_ = route_index;
   // Note: 获取没有loop的路由区间[adc_index - 1, range_end_]
   UpdateRoutingRange(adc_route_index_);
@@ -228,14 +236,17 @@ bool PncMap::IsNewRouting(const routing::RoutingResponse &prev,
 }
 
 // Note: 当IsNewRouting，更新路由信息
-// 剥离routing结果, 计算waypoints在routing中的什么位置
+// 剥离routing结果，建立路由段索引(路由段在RoutingResponse中的索引)
+// 获取有效路由段区间，获取request中的waypoints的路由段索引
 bool PncMap::UpdateRoutingResponse(const routing::RoutingResponse &routing) {
   // Note: 在有效(no loop)区间范围内的RoutingResponse中包含的Lane Id
   range_lane_ids_.clear();
+  // Note: 路由段及其在RoutingResponse中的索引
   // Note: RoutingResponse包含的所有路由段(LaneSegment)&位置信息(road_id, passage_index, lane_id)
   route_indices_.clear();
   // Note: RoutingResponse中包含的所有的Lane Id
   all_lane_ids_.clear();
+  // Note: 计算路由段在RoutingResponse中的索引
   for (int road_index = 0; road_index < routing.road_size(); ++road_index) {
     const auto &road_segment = routing.road(road_index);
     for (int passage_index = 0; passage_index < road_segment.passage_size();
@@ -258,10 +269,11 @@ bool PncMap::UpdateRoutingResponse(const routing::RoutingResponse &routing) {
 
   range_start_ = 0;
   range_end_ = 0;
-  // Note: 自车所在的routing位置(在route_indices_下标位置)
+  // Note: 自车所在的索引位置(在route_indices_下标位置)
   adc_route_index_ = -1;
+  // Note: 下一个必经点的索引
   next_routing_waypoint_index_ = 0;
-  // Note: 获取没有loop的路由区间[range_start_, range_end_]
+  // Note: 获取没有loop的路由区间[range_start_, range_end_)
   UpdateRoutingRange(adc_route_index_);
 
   // Note: waypoints的LaneWaypoint信息和waypoints在route_indices_中的下标
@@ -271,6 +283,8 @@ bool PncMap::UpdateRoutingResponse(const routing::RoutingResponse &routing) {
     AERROR << "Invalid routing: no request waypoints.";
     return false;
   }
+  // Note: 注意，可能有多个request_waypoint在同一个route_indices_索引中
+  // 即同一LaneSegment上有多个request_waypoint
   int i = 0;
   for (size_t j = 0; j < route_indices_.size(); ++j) {
     while (i < request_waypoints.size() &&
@@ -348,21 +362,32 @@ int PncMap::NextWaypointIndex(int index) const {
   }
 }
 
-// Note: 获取ADC投影点所在的索引
+// Note: 获取自车(VehicleState)投影点所在的路由索引
+// Note: 只在UpdateVehicleState中被调用，传入的waypoint是自车路由位置(adc_waypoint_)
 int PncMap::GetWaypointIndex(const LaneWaypoint &waypoint) const {
+  // Note: 这时候adc_route_index_还没更新，是上一轮位置更新后的路由索引
+  // Note: 从adc_route_index_开始往前查找，看看waypoint在哪段路由中
   int forward_index = SearchForwardWaypointIndex(adc_route_index_, waypoint);
+  // Note: 往前没搜到就倒着搜，直接返回倒着搜的结果
+  // Note: 倒车才会导致向前找没找到
   if (forward_index >= static_cast<int>(route_indices_.size())) {
     return SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   }
+  // Note: 正常自动驾驶LaneFollow的话，自车一般就还在同一个路由段或者到达下一个路由段
   if (forward_index == adc_route_index_ ||
       forward_index == adc_route_index_ + 1) {
     return forward_index;
   }
+  // Note: 现在往前已经找到一个自车路由索引，但位置不符合要求(forward_index > adc_route_index_ + 1)
+  // Note: 什么情况下倒着搜也能搜到？全局路由包含cycle？
+  // Note: 为什么要添加下面这些逻辑是为了处理什么情况而准备的？
   auto backward_index = SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   if (backward_index < 0) {
     return forward_index;
   }
-
+  // Note: 走到这里说明正向和反向都找到了waypoint所在的路由索引
+  // Note: 只有带cycle的情况下进行倒车才可能进入下面的逻辑
+  // Note: 倒车的情况下，上一轮自车在的地方还要再走一次
   return (backward_index + 1 == adc_route_index_) ? backward_index
                                                   : forward_index;
 }
@@ -392,12 +417,13 @@ std::vector<int> PncMap::GetNeighborPassages(const routing::RoadSegment &road,
   CHECK_GE(start_passage, 0);
   CHECK_LE(start_passage, road.passage_size());
   std::vector<int> result;
+  // Note: 自车所在的passage
   const auto &source_passage = road.passage(start_passage);
   result.emplace_back(start_passage);
+  // Note: 无需变道
   if (source_passage.change_lane_type() == routing::FORWARD) {
     return result;
   }
-  // Note: source_passage是变道的目标passage，无需再变道
   if (source_passage.can_exit()) {  // No need to change lane
     return result;
   }
@@ -482,6 +508,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
   // Raw filter to find all neighboring passages
   // Note: 非变道情况下返回当前passage，
   // 变道情况下(passage_index为开始变道的passage)返回当前passage和换道的目标passage
+  // 根据这里的逻辑，非变道passage返回一条passage，变道passage返回两条passage
   auto drive_passages = GetNeighborPassages(road, passage_index);
   for (const int index : drive_passages) {
     const auto &passage = road.passage(index);
@@ -499,6 +526,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
     // sl表示(nearest_point到segments起点的accumulated_s, nearest_point的横向偏移l)
     common::SLPoint sl;
     LaneWaypoint segment_waypoint;
+    // Note: 计算自车在segments的相对位置(sl)
     if (!segments.GetProjection(nearest_point, &sl, &segment_waypoint)) {
       ADEBUG << "Failed to get projection from point: "
              << nearest_point.ShortDebugString();
@@ -515,7 +543,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
     route_segments->emplace_back();
     // Note: segments末点
     const auto last_waypoint = segments.LastWaypoint();
-    // Note: 对segments前后进行延长，延长的结果放到route_segments->back()
+    // Note: 以自车位置为基准，对segments前后进行延长，延长至指定长度
     if (!ExtendSegments(segments, sl.s() - backward_length,
                         sl.s() + forward_length, &route_segments->back())) {
       AERROR << "Failed to extend segments with s=" << sl.s()
@@ -524,6 +552,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
       return false;
     }
     // Note: 往车头方向扩展超过了segments的末点
+    // Note: 设定这个RouteEndWaypoint有什么用途
     if (route_segments->back().IsWaypointOnSegment(last_waypoint)) {
       route_segments->back().SetRouteEndWaypoint(last_waypoint);
     }
@@ -531,13 +560,14 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
     route_segments->back().SetNextAction(passage.change_lane_type());
     const std::string route_segment_id = absl::StrCat(road_index, "_", index);
     route_segments->back().SetId(route_segment_id);
+    // Note: 如果下一个waypoint就是终点了，则stop_for_destination_为真
     route_segments->back().SetStopForDestination(stop_for_destination_);
     if (index == passage_index) {
-      // Note: ADC所在的segments
+      // Note: 自车所在的segments
       route_segments->back().SetIsOnSegment(true);
       route_segments->back().SetPreviousAction(routing::FORWARD);
-    // Note: 注意，sl是将ADC投影到passage，即ADC相对与passage的位置
-    // ADC在passage的左边
+    // Note: 注意，sl是将自车投影到passage，即自车相对于passage的位置
+    // 自车在passage的左边
     } else if (sl.l() > 0) {
       route_segments->back().SetPreviousAction(routing::RIGHT);
     } else {
@@ -548,6 +578,9 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
 }
 
 // Note: 将VehicleState投影到最近的路由Lane中，获取Lane和在Lane中对应的位置s
+// Note: 这个找自车最近的路由段的接口不考虑上下文信息，直接从路由结果和地图中搜索
+// Note: 这个找距离自车最近的路由Lane的策略可能会出问题，
+// 例如对于8字型路由结果，经过中间的交叉点的时候可能会一下子跳到后面的路由Lane
 bool PncMap::GetNearestPointFromRouting(const VehicleState &state,
                                         LaneWaypoint *waypoint) const {
   const double kMaxDistance = 10.0;  // meters.
@@ -604,6 +637,8 @@ bool PncMap::GetNearestPointFromRouting(const VehicleState &state,
     double distance = 0.0;
     common::PointENU map_point =
         lane->GetNearestPoint({point.x(), point.y()}, &distance);
+    // Note: 这个单纯考虑距离的模式对于8字型的路由结果会选错Lane
+    // 当ADC经过路由结果交叉的Lane时可能会选错Lane
     if (distance < min_distance) {
       min_distance = distance;
       double s = 0.0;

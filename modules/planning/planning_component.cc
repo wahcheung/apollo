@@ -133,12 +133,13 @@ bool PlanningComponent::Proc(
   ADCTrajectory adc_trajectory_pb;
   planning_base_->RunOnce(local_view_, &adc_trajectory_pb);
   auto start_time = adc_trajectory_pb.header().timestamp_sec();
+  // Note: FillHeader会更新adc_trajectory_pb时间戳为当前时间
   common::util::FillHeader(node_->Name(), &adc_trajectory_pb);
 
   // modify trajectory relative time due to the timestamp change in header
   const double dt = start_time - adc_trajectory_pb.header().timestamp_sec();
   for (auto& p : *adc_trajectory_pb.mutable_trajectory_point()) {
-    // Note: 这里不应该是-dt么
+    // Note(TODO): 由于dt是负值，这里缩小了relative_time，原因待明确
     p.set_relative_time(p.relative_time() + dt);
   }
   planning_writer_->Write(adc_trajectory_pb);
