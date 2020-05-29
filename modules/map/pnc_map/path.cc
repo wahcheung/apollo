@@ -46,6 +46,7 @@ namespace {
 
 const double kSampleDistance = 0.25;
 
+// Note: 通过LaneWaypoint检查两个MapPathPoint是否属于同一条Lane
 bool FindLaneSegment(const MapPathPoint& p1, const MapPathPoint& p2,
                      LaneSegment* const lane_segment) {
   for (const auto& wp1 : p1.lane_waypoints()) {
@@ -288,6 +289,8 @@ std::string PathOverlap::DebugString() const {
   return absl::StrCat(object_id, " ", start_s, " ", end_s);
 }
 
+// Note: 参考线平滑后的ReferencePoints会通过这个构造函数创建参考线底下的map_path_
+// 这些传进来的MapPathPoint包含了xy和sl信息，l值指的是这个点在Lane中心线的什么位置(左正右负)
 Path::Path(const std::vector<MapPathPoint>& path_points)
     : path_points_(path_points) {
   Init();
@@ -332,7 +335,6 @@ Path::Path(const std::vector<LaneSegment>& segments)
   // 将Passage表示成离散的点
   for (const auto& segment : lane_segments_) {
     // Note: 获取地图Lane中心线的采样点，这些MapPathPoint的横向偏置都是默认值0
-    // 这里获取MapPathPoint使得每个MapPathPoint都有且仅有一个LaneWaypoint
     const auto points = MapPathPoint::GetPointsFromLane(
         segment.lane, segment.start_s, segment.end_s);
     path_points_.insert(path_points_.end(), points.begin(), points.end());
@@ -369,13 +371,21 @@ Path::Path(std::vector<MapPathPoint>&& path_points,
 }
 
 void Path::Init() {
+  // Note: 根据地图点path_points_信息计算segments_/accumulated_s_/unit_directions_
   InitPoints();
+  // Note: 计算lane_accumulated_s_和lane_segments_to_next_point_
   InitLaneSegments();
+  // Note: 计算每个等距离采样点都被夹在哪段accumulated_s_中间
   InitPointIndex();
+  // Note: 计算均匀采样点Lane/Road left/right宽度
+  // Note: 这个left/right宽度都是正值，宽度参考点为采样点，
+  // 即这个left/right宽度是相对于采样点而言，表示的是这个边界在采样点的左边/右边多远的位置
   InitWidth();
+  // Note: 整合Path中的Overlap，将overlap的start_s和end_s转化为相对于Path起点的s距离
   InitOverlaps();
 }
 
+// Note: 根据地图点path_points_信息计算segments_/accumulated_s_/unit_directions_
 // Note: 分段，计算采样点的朝向/累计距离
 void Path::InitPoints() {
   num_points_ = static_cast<int>(path_points_.size());
@@ -444,13 +454,14 @@ void Path::InitLaneSegments() {
     if (FindLaneSegment(path_points_[i], path_points_[i + 1], &lane_segment)) {
       lane_segments_to_next_point_.push_back(lane_segment);
     } else {
+      // 
       lane_segments_to_next_point_.push_back(LaneSegment());
     }
   }
   CHECK_EQ(lane_segments_to_next_point_.size(), num_segments_);
 }
 
-// Note: 计算均匀采样点处的路面左右宽度
+// Note: 计算均匀采样点处的路面(Lane/Road)左右宽度
 void Path::InitWidth() {
   lane_left_width_.clear();
   lane_left_width_.reserve(num_sample_points_);
@@ -465,6 +476,7 @@ void Path::InitWidth() {
   double s = 0;
   for (int i = 0; i < num_sample_points_; ++i) {
     const MapPathPoint point = GetSmoothPoint(s);
+    // Note: 没有Waypoint信息就无法明确应该取哪条Lane的宽度
     if (point.lane_waypoints().empty()) {
       lane_left_width_.push_back(FLAGS_default_lane_width / 2.0);
       lane_right_width_.push_back(FLAGS_default_lane_width / 2.0);
@@ -479,6 +491,9 @@ void Path::InitWidth() {
       double lane_left_width = 0.0;
       double lane_right_width = 0.0;
       waypoint.lane->GetWidth(waypoint.s, &lane_left_width, &lane_right_width);
+      // Note: waypoint.l指的是这个点相对于Lane中心线的横向距离(在中心线左边为正，右边为负)
+      // Note: 下面的计算表明，lane_left_width_的意思是参考线上的点到Lane左右边界的距离
+      // Note: 在做参考线平滑的时候对点做了范围控制，waypoint.l值应该不会超出Lane的边界
       lane_left_width_.push_back(lane_left_width - waypoint.l);
       lane_right_width_.push_back(lane_right_width + waypoint.l);
 
@@ -501,6 +516,7 @@ void Path::InitWidth() {
 // Note: 计算每个等距离采样点都被夹在哪段accumulated_s_中间
 void Path::InitPointIndex() {
   last_point_index_.clear();
+  // Note: num_sample_points_ = static_cast<int>(length_ / kSampleDistance) + 1;
   last_point_index_.reserve(num_sample_points_);
   double s = 0.0;
   int last_index = 0;
@@ -612,7 +628,7 @@ void Path::InitOverlaps() {
 }
 
 // Note: 根据前置紧邻path_points_参考点的索引下标和偏移量，计算点的具体位置
-// LaneWaypoint就是为了指示这个点对应的是哪条Lane上的点，后面根据这个去采样点所在的路面宽度
+// LaneWaypoint就是为了指示这个点对应的是哪条Lane上的点，后面根据这个去点所在的路面取宽度
 MapPathPoint Path::GetSmoothPoint(const InterpolatedIndex& index) const {
   CHECK_GE(index.id, 0);
   CHECK_LT(index.id, num_points_);
@@ -635,7 +651,6 @@ MapPathPoint Path::GetSmoothPoint(const InterpolatedIndex& index) const {
             break;
           }
         }
-        // Note: 把对应位置的LaneWaypoint加上
         // ref_lane_waypoint的l值在之前的流程中从未被更改，维持默认值0
         point.add_lane_waypoint(
             LaneWaypoint(lane_segment.lane, lane_segment.start_s + index.offset,
@@ -669,6 +684,7 @@ double Path::GetSFromIndex(const InterpolatedIndex& index) const {
 // 返回结果表示的是s所在位置在accumulated_s_[InterpolatedIndex.id]前方InterpolatedIndex.offset的位置
 // Note: 这里没有必要使用last_point_index_，可以直接对[0, num_points_]进行二分查找
 // 为了减少几轮循环，代码变得复杂了不少
+// Note: 这里一顿操作就只是为了看看这个s在accumulated_s_的什么位置
 InterpolatedIndex Path::GetIndexFromS(double s) const {
   if (s <= 0.0) {
     return {0, 0.0};
@@ -831,6 +847,7 @@ bool Path::GetProjectionWithHueristicParams(const Vec2d& point,
   return true;
 }
 
+// Note: 点到Path的投影sl实际上是算的是点到最近的Path Segment的sl
 bool Path::GetProjection(const Vec2d& point, double* accumulate_s,
                          double* lateral, double* min_distance) const {
   if (segments_.empty()) {
@@ -901,6 +918,7 @@ double Path::GetLaneRightWidth(const double s) const {
   return GetSample(lane_right_width_, s);
 }
 
+// Note: 参考线上的点到Lane左右边界的宽度
 bool Path::GetLaneWidth(const double s, double* lane_left_width,
                         double* lane_right_width) const {
   CHECK_NOTNULL(lane_left_width);

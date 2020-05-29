@@ -48,6 +48,7 @@ using apollo::common::math::Vec2d;
 using apollo::common::util::DistanceXY;
 using apollo::hdmap::InterpolatedIndex;
 
+// Note: 参考线平滑之后把平滑线上的点传进来用于构造ReferenceLine
 ReferenceLine::ReferenceLine(
     const std::vector<ReferencePoint>& reference_points)
     : reference_points_(reference_points),
@@ -62,6 +63,7 @@ ReferenceLine::ReferenceLine(const MapPath& hdmap_path)
   for (const auto& point : hdmap_path.path_points()) {
     DCHECK(!point.lane_waypoints().empty());
     const auto& lane_waypoint = point.lane_waypoints()[0];
+    // Note: reference_points_源于此
     reference_points_.emplace_back(
         hdmap::MapPathPoint(point, point.heading(), lane_waypoint), 0.0, 0.0);
   }
@@ -140,6 +142,8 @@ ReferencePoint ReferenceLine::GetNearestReferencePoint(
   return reference_points_[min_index];
 }
 
+// Note: 切割ReferenceLine，切除在太后面和太前面的部分
+// 其实就是把太远的reference_points_去掉，然后重建Path
 bool ReferenceLine::Segment(const common::math::Vec2d& point,
                             const double look_backward,
                             const double look_forward) {
@@ -291,6 +295,7 @@ std::vector<ReferencePoint> ReferenceLine::GetReferencePoints(
   return ref_points;
 }
 
+// Note: 通过插值获取s处的ReferencePoint
 ReferencePoint ReferenceLine::GetReferencePoint(const double s) const {
   const auto& accumulated_s = map_path_.accumulated_s();
   if (s < accumulated_s.front() - 1e-2) {
@@ -394,6 +399,7 @@ bool ReferenceLine::XYToSL(const common::math::Vec2d& xy_point,
                            SLPoint* const sl_point) const {
   double s = 0.0;
   double l = 0.0;
+  // Note: 点到Path的投影sl实际上是算的是点到最近的Path Segment的sl
   if (!map_path_.GetProjection(xy_point, &s, &l)) {
     AERROR << "Cannot get nearest point from path.";
     return false;
@@ -413,6 +419,7 @@ ReferencePoint ReferenceLine::InterpolateWithMatchedIndex(
   DCHECK_LE(s0 - 1.0e-6, s) << "s: " << s << " is less than s0 : " << s0;
   DCHECK_LE(s, s1 + 1.0e-6) << "s: " << s << " is larger than s1: " << s1;
 
+  // Note: map_path_point会包含LaneWaypoint
   auto map_path_point = map_path_.GetSmoothPoint(index);
   const double kappa = common::math::lerp(p0.kappa(), s0, p1.kappa(), s1, s);
   const double dkappa = common::math::lerp(p0.dkappa(), s0, p1.dkappa(), s1, s);
@@ -464,7 +471,7 @@ const std::vector<ReferencePoint>& ReferenceLine::reference_points() const {
 
 const MapPath& ReferenceLine::map_path() const { return map_path_; }
 
-// Note: 这个是获取的是Lane的左右宽度还是相对于参考线的左右宽度?
+// Note: 这个是获取的是参考线到Lane左右边界距离，即这个宽度是相对于参考线而言
 bool ReferenceLine::GetLaneWidth(const double s, double* const lane_left_width,
                                  double* const lane_right_width) const {
   if (map_path_.path_points().empty()) {
@@ -477,10 +484,8 @@ bool ReferenceLine::GetLaneWidth(const double s, double* const lane_left_width,
   return true;
 }
 
-// Note: 这个offset的正负的比较基准是什么?(Lane or ReferenceLine)
-// 观察PathBoundsDecider::InitPathBoundsDecider中对这个接口的调用，
-// 猜测作者原意是以Lane作为基准，
-// 如果ReferenceLine在Lane中心线左边则l_offset为正，反之为负
+// Note: 在s处，参考线偏离Lane中心线的l_offset
+// Note: l_offset为正表示参考线s处在Lane中心线左边，反之则在右边
 bool ReferenceLine::GetOffsetToMap(const double s, double* l_offset) const {
   if (map_path_.path_points().empty()) {
     return false;
@@ -514,6 +519,7 @@ void ReferenceLine::GetLaneFromS(
   }
 }
 
+// Note: 对单个障碍物做剩余行驶路宽的判断
 double ReferenceLine::GetDrivingWidth(const SLBoundary& sl_boundary) const {
   double lane_left_width = 0.0;
   double lane_right_width = 0.0;
@@ -534,6 +540,7 @@ bool ReferenceLine::IsOnLane(const common::math::Vec2d& vec2d_point) const {
   return IsOnLane(sl_point);
 }
 
+// Note: 判断sl_boundary与Lane有交叉部分
 bool ReferenceLine::IsOnLane(const SLBoundary& sl_boundary) const {
   if (sl_boundary.end_s() < 0 || sl_boundary.start_s() > Length()) {
     return false;
@@ -542,6 +549,7 @@ bool ReferenceLine::IsOnLane(const SLBoundary& sl_boundary) const {
   double lane_left_width = 0.0;
   double lane_right_width = 0.0;
   map_path_.GetLaneWidth(middle_s, &lane_left_width, &lane_right_width);
+  // Note: 判断是否有交集
   return sl_boundary.start_l() <= lane_left_width &&
          sl_boundary.end_l() >= -lane_right_width;
 }

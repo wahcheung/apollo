@@ -142,6 +142,7 @@ void ReferenceLineProvider::Stop() {
   }
 }
 
+// Note: 更新ReferenceLineProvider保存的ReferenceLine/RouteSegments
 void ReferenceLineProvider::UpdateReferenceLine(
     const std::list<ReferenceLine> &reference_lines,
     const std::list<hdmap::RouteSegments> &route_segments) {
@@ -255,6 +256,7 @@ bool ReferenceLineProvider::GetReferenceLines(
   } else {
     double start_time = Clock::NowInSeconds();
     if (CreateReferenceLine(reference_lines, segments)) {
+      // Note: 更新参考线
       UpdateReferenceLine(*reference_lines, *segments);
       double end_time = Clock::NowInSeconds();
       last_calculation_time_ = end_time - start_time;
@@ -560,6 +562,12 @@ bool ReferenceLineProvider::CreateRouteSegments(
   return !segments->empty();
 }
 
+// Note: 创建参考线
+// Note: 如果当前Vehicle所在的Passage的NextAction是要LaneChange的，则会有两条ReferenceLine
+// 在CreateRouteSegments里面做了个特殊处理，
+// 如果FLAGS_prioritize_change_lane为假，
+// 则第一条ReferenceLine为自车所在的Passage，将要变道进入的Passage是第二条ReferenceLine
+// 否则，如果FLAGS_prioritize_change_lane为真，ReferenceLine是倒叙排列的
 bool ReferenceLineProvider::CreateReferenceLine(
     std::list<ReferenceLine> *reference_lines,
     std::list<hdmap::RouteSegments> *segments) {
@@ -585,7 +593,7 @@ bool ReferenceLineProvider::CreateReferenceLine(
       is_new_routing = true;
       // Note: 当IsNewRouting，更新路由信息
       // 剥离routing结果，建立路由段索引(路由段在RoutingResponse中的索引)
-      // 获取有效路由段区间，获取request中的waypoints的路由段索引
+      // 获取有效路由段区间，获取request中的waypoints所在的路由段索引
       if (!pnc_map_->UpdateRoutingResponse(routing)) {
         AERROR << "Failed to update routing in pnc map";
         return false;
@@ -748,6 +756,7 @@ bool ReferenceLineProvider::Shrink(const common::SLPoint &sl,
   const auto &ref_points = reference_line->reference_points();
   const double cur_heading = ref_points[index].heading();
   auto last_index = index;
+  // Note: 如果参考线Vehicle前方的点heading变化太大，需要切割
   while (last_index < ref_points.size() &&
          AngleDiff(cur_heading, ref_points[last_index].heading()) <
              kMaxHeadingDiff) {
@@ -761,11 +770,12 @@ bool ReferenceLineProvider::Shrink(const common::SLPoint &sl,
     new_forward_distance = forward_sl.s() - sl.s();
   }
   if (need_shrink) {
-    // Note: 切割
+    // Note: 切割，将指定范围内的reference_points_取出来，重新生成map_path_
     if (!reference_line->Segment(sl.s(), new_backward_distance,
                                  new_forward_distance)) {
       AWARN << "Failed to shrink reference line";
     }
+    // Note: 把超出范围的RouteSegments剪掉
     if (!segments->Shrink(sl.s(), new_backward_distance,
                           new_forward_distance)) {
       AWARN << "Failed to shrink route segment";
@@ -800,6 +810,8 @@ bool ReferenceLineProvider::IsReferenceLineSmoothValid(
   return true;
 }
 
+// Note: 获取平滑参考线的锚点和锚点处的lateral_bound
+// 为了使参考线尽量远离马路路沿/花圃/护栏之类的边界，锚点位置根据LaneBoundary情况做了横向偏移
 AnchorPoint ReferenceLineProvider::GetAnchorPoint(
     const ReferenceLine &reference_line, double s) const {
   AnchorPoint anchor;
@@ -824,7 +836,7 @@ AnchorPoint ReferenceLineProvider::GetAnchorPoint(
 
   // shrink width by vehicle width, curb
   double safe_lane_width = left_width + right_width;
-  // Note: 路面冗余宽度
+  // Note: Vehicle中心可通行区域的宽度
   safe_lane_width -= adc_width;
   bool is_lane_width_safe = true;
 
@@ -880,6 +892,7 @@ AnchorPoint ReferenceLineProvider::GetAnchorPoint(
   return anchor;
 }
 
+// Note: 对原始参考线做均匀采样作为锚点，用于平滑参考线
 void ReferenceLineProvider::GetAnchorPoints(
     const ReferenceLine &reference_line,
     std::vector<AnchorPoint> *anchor_points) const {
@@ -908,6 +921,7 @@ bool ReferenceLineProvider::SmoothRouteSegment(const RouteSegments &segments,
   // 能提供非常丰富的数据接口
   // 可以认为，Path就是将Passage看作一条Lane了，用于提供Passage上的各种细节信息
   hdmap::Path path(segments);
+  // Note: 对参考线做平滑
   return SmoothReferenceLine(ReferenceLine(path), reference_line);
 }
 
@@ -961,7 +975,7 @@ bool ReferenceLineProvider::SmoothReferenceLine(
   }
   // generate anchor points:
   std::vector<AnchorPoint> anchor_points;
-  // Note: 根据Lane左右边界的类型合理地对中心线参考点做一定的偏移，远离路沿
+  // Note: 根据Lane左右边界的类型合理地对AnchorPoint做一定的偏移，远离路沿
   // 计算中心点的可行区域(中心点位置+宽度 的形式)
   GetAnchorPoints(raw_reference_line, &anchor_points);
   smoother_->SetAnchorPoints(anchor_points);
@@ -969,6 +983,7 @@ bool ReferenceLineProvider::SmoothReferenceLine(
     AERROR << "Failed to smooth reference line with anchor points";
     return false;
   }
+  // Note: 判断平滑后的参考线是否偏移原始的参考线太多
   if (!IsReferenceLineSmoothValid(raw_reference_line, *reference_line)) {
     AERROR << "The smoothed reference line error is too large";
     return false;

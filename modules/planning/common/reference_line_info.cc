@@ -75,11 +75,14 @@ bool ReferenceLineInfo::Init(const std::vector<const Obstacle*>& obstacles) {
   Box2d vehicle_box(vehicle_center, vehicle_state_.heading(), param.length(),
                     param.width());
 
+  // Note: 规划起始点的自车Box
   if (!reference_line_.GetSLBoundary(box, &adc_sl_boundary_)) {
     AERROR << "Failed to get ADC boundary from box: " << box.DebugString();
     return false;
   }
 
+  // Note: 找规划起始点前方最近的各种类型的Overlap
+  // Note: Overlaps按照start_s升序排列
   InitFirstOverlaps();
 
   if (adc_sl_boundary_.end_s() < 0 ||
@@ -212,7 +215,7 @@ bool ReferenceLineInfo::GetNeighborLaneInfo(
   return true;
 }
 
-// Note: 找车前方最近的Overlap
+// Note: 找规划起始点前方最近的Overlap
 bool ReferenceLineInfo::GetFirstOverlap(
     const std::vector<hdmap::PathOverlap>& path_overlaps,
     hdmap::PathOverlap* path_overlap) {
@@ -240,6 +243,8 @@ bool ReferenceLineInfo::GetFirstOverlap(
   return overlap_min_s < kMaxOverlapRange;
 }
 
+// Note: 找规划起始点前方最近的各种类型的Overlap
+// Note: Overlaps按照start_s升序排列
 void ReferenceLineInfo::InitFirstOverlaps() {
   const auto& map_path = reference_line_.map_path();
   // clear_zone
@@ -356,6 +361,8 @@ bool ReferenceLineInfo::AddObstacleHelper(
 }
 
 // AddObstacle is thread safe
+// Note: 添加障碍物，计算障碍物的SlBoundary，添加障碍物的is_lane_blocking_属性
+// Note: 障碍物保存在path_decision_中
 Obstacle* ReferenceLineInfo::AddObstacle(const Obstacle* obstacle) {
   if (!obstacle) {
     AERROR << "The provided obstacle is empty";
@@ -374,6 +381,7 @@ Obstacle* ReferenceLineInfo::AddObstacle(const Obstacle* obstacle) {
     return mutable_obstacle;
   }
   mutable_obstacle->SetPerceptionSlBoundary(perception_sl);
+  // Note: 检查obstacle是否位于reference_line上，挡住通道
   mutable_obstacle->CheckLaneBlocking(reference_line_);
   if (mutable_obstacle->IsLaneBlocking()) {
     ADEBUG << "obstacle [" << obstacle->Id() << "] is lane blocking.";
@@ -381,6 +389,7 @@ Obstacle* ReferenceLineInfo::AddObstacle(const Obstacle* obstacle) {
     ADEBUG << "obstacle [" << obstacle->Id() << "] is NOT lane blocking.";
   }
 
+  // Note: 在自车后方的不相关的障碍物
   if (IsIrrelevantObstacle(*mutable_obstacle)) {
     ObjectDecisionType ignore;
     ignore.mutable_ignore();
@@ -429,6 +438,8 @@ bool ReferenceLineInfo::AddObstacles(
   return true;
 }
 
+// Note: 判断障碍物是不是无需考虑的障碍物
+// 分两种，超出参考线长度范围的障碍物以及在自车后方的障碍物
 bool ReferenceLineInfo::IsIrrelevantObstacle(const Obstacle& obstacle) {
   if (obstacle.IsCautionLevelObstacle()) {
     return false;
@@ -440,6 +451,7 @@ bool ReferenceLineInfo::IsIrrelevantObstacle(const Obstacle& obstacle) {
   }
   // Note: 与自车在同一Lane上但位于自车后方的车辆
   // TODO(huachang): end_s小于adc的end_s这个判断不是太鲁莽了
+  // Note: 自车在当前Path上，障碍物与当前Path有交集且障碍物在后方
   if (is_on_reference_line_ && !IsChangeLanePath() &&
       obstacle_boundary.end_s() < adc_sl_boundary_.end_s() &&
       (reference_line_.IsOnLane(obstacle_boundary) ||
@@ -544,7 +556,7 @@ void ReferenceLineInfo::SetDrivable(bool drivable) { is_drivable_ = drivable; }
 
 bool ReferenceLineInfo::IsDrivable() const { return is_drivable_; }
 
-// Note: 不是自车所在的Path
+// Note: 自车不在这个Passage中
 bool ReferenceLineInfo::IsChangeLanePath() const {
   return !Lanes().IsOnSegment();
 }

@@ -208,6 +208,7 @@ void LaneInfo::Init() {
   CreateKDTree();
 }
 
+// Note: Lane s位置处的Lane左右宽度
 void LaneInfo::GetWidth(const double s, double *left_width,
                         double *right_width) const {
   if (left_width != nullptr) {

@@ -136,6 +136,7 @@ void PncMap::UpdateNextRoutingWaypointIndex(int cur_index) {
   }
 }
 
+// Note: 顾名思义，未来要经过的Waypoints
 std::vector<routing::LaneWaypoint> PncMap::FutureRouteWaypoints() const {
   const auto &waypoints = routing_.routing_request().waypoint();
   return std::vector<routing::LaneWaypoint>(
@@ -237,7 +238,7 @@ bool PncMap::IsNewRouting(const routing::RoutingResponse &prev,
 
 // Note: 当IsNewRouting，更新路由信息
 // 剥离routing结果，建立路由段索引(路由段在RoutingResponse中的索引)
-// 获取有效路由段区间，获取request中的waypoints的路由段索引
+// 获取有效路由段区间，获取request中的waypoints所在的路由段索引
 bool PncMap::UpdateRoutingResponse(const routing::RoutingResponse &routing) {
   // Note: 在有效(no loop)区间范围内的RoutingResponse中包含的Lane Id
   range_lane_ids_.clear();

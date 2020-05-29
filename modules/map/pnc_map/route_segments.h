@@ -210,6 +210,8 @@ class RouteSegments : public std::vector<LaneSegment> {
    * whether this segment can lead to another passage region in routing
    */
   // Note: 这个RouteSegments表示的Passage的can_exit字段
+  // 表示的是Vechcle是否会从Routing中Passage的末点退出该Passage
+  // 如果this Passage需要变道，则这个字段为false
   bool can_exit_ = false;
 
   /**
@@ -230,13 +232,15 @@ class RouteSegments : public std::vector<LaneSegment> {
   // Note: 由上一条Passage进入当前Passage的方式
   routing::ChangeLaneType previous_action_ = routing::FORWARD;
 
+  // Note: 这个就是该Passage在RoutingResponse中的road_index + "_" + passage_index"
   std::string id_;
 
   /**
    * Whether the vehicle should stop for destination. In a routing that has
    * loops, the adc may pass by destination many times, but it only need to stop
-   * for destination  in the last loop.
+   * for destination in the last loop.
    */
+  // Note: 下一个waypoint是终点，这个就会被置true
   bool stop_for_destination_ = false;
 };
 

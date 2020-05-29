@@ -44,7 +44,9 @@ struct LaneWaypoint {
   LaneWaypoint(LaneInfoConstPtr lane, const double s, const double l)
       : lane(CHECK_NOTNULL(lane)), s(s), l(l) {}
   LaneInfoConstPtr lane = nullptr;
+  // Note: 点相对于Lane中心线起始点的accumulated s距离
   double s = 0.0;
+  // Note: 点相对于Lane中心线的Lateral距离，在Lane中心线左边为正，右边为负
   double l = 0.0;
 
   std::string DebugString() const;
@@ -101,6 +103,10 @@ struct PathOverlap {
   std::string DebugString() const;
 };
 
+// Note: MapPathPoint是为了表示Path上的点，
+// 这个点的信息除了位置(x,y), 朝向(heading), 
+// 还包含了这个点是位于哪个Lane(LaneID)上的什么位置(s)，这就是LaneWaypoint信息
+// Path上的一个MapPathPoint如果在两条Lane的连接处，就可能有多个LaneWaypoint
 class MapPathPoint : public common::math::Vec2d {
  public:
   MapPathPoint() = default;
@@ -352,14 +358,21 @@ class Path {
   int num_points_ = 0;
   // Note: 等于num_points_ - 1
   int num_segments_ = 0;
-  // Note: 中心线样本点
+  // Note: 这个path_points_意义前后会发生变化
+  // 在平滑参考线前，path_points_就是Passage中的LaneSegment中心线取出来的点（直接从地图Lane信息取）
+  // LaneWaypoint表示这个点代表的是哪条Lane上什么位置的点
+  // 对于两条Lane连接处的MapPathPoint，这个点出现在前后两条Lane的中心线上
+  // 那么这个MapPathPoint会带有两个LaneWaypoint，用于表明这个点的来源
+  // 在参考线平滑后(实际上就是对path_points_这些点形成的曲线做平滑)，
+  // 将平滑的曲线上的点重新赋值给path_points_，然后重新执行初始化流程Init()
   std::vector<MapPathPoint> path_points_;
-  // Note: 同Lane的LaneSegment合并后形成的LaneSegment列表
+  // Note: 形成Path的LaneSegment列表
   std::vector<LaneSegment> lane_segments_;
   // Note: lane_segments_中每个LaneSegment(Lane)末点的累计距离累加
   std::vector<double> lane_accumulated_s_;
   // Note: 采样点path_points_形成的LaneSegment
   // 这个与segments_很像，但注意两者存的信息不一样的
+  // Note: 第i个元素表示path_points_[i] --> path_points_[i + 1]
   std::vector<LaneSegment> lane_segments_to_next_point_;
   std::vector<common::math::Vec2d> unit_directions_;
   // Note: 中心线长度，等于最后一个样本点的累计距离
@@ -374,13 +387,18 @@ class Path {
   PathApproximation approximation_;
 
   // Sampled every fixed length.
+  // Note: 均匀采样点分布位置为0, gap, 2*gap, 3*gap, ..., k*gap, path_length
+  // Note: 均匀采样点数量
   int num_sample_points_ = 0;
   // Note: 均匀采样点处的Lane的左右宽度
+  // Note: 参考线上的点到Lane左右边界的距离!
+  // Note: 在InitWidth()中计算得到
   std::vector<double> lane_left_width_;
   std::vector<double> lane_right_width_;
   // Note: 均匀采样点处的Road的左右宽度
   std::vector<double> road_left_width_;
   std::vector<double> road_right_width_;
+  // Note: 均匀采样点的(左边)紧邻的path_points_的下标
   std::vector<int> last_point_index_;
 
   std::vector<PathOverlap> lane_overlaps_;

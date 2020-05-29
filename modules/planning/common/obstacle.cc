@@ -194,7 +194,7 @@ bool Obstacle::IsValidPerceptionObstacle(const PerceptionObstacle& obstacle) {
 }
 
 // Note: 根据预测结果创建obstacles，动态obstacle如果有多条轨迹预测线，
-// 则创建多个obstacle(拥有一样的box，但不一样的轨迹)
+// 则创建多个obstacle(拥有一样的box，但不一样的轨迹)，不同轨迹创建的障碍物的ID是不一样的，添加了轨迹下标做区分
 std::list<std::unique_ptr<Obstacle>> Obstacle::CreateObstacles(
     const prediction::PredictionObstacles& predictions) {
   std::list<std::unique_ptr<Obstacle>> obstacles;
@@ -731,7 +731,7 @@ bool Obstacle::IsValidObstacle(
          object_length > kMinObjectDimension;
 }
 
-// Note: 检查obstacle是否位于reference_line上，挡住通道
+// Note: 检查静态obstacle是否挡住了ReferenceLine所在的Lane导致剩余路宽不足够Vehicle通行
 void Obstacle::CheckLaneBlocking(const ReferenceLine& reference_line) {
   if (!IsStatic()) {
     is_lane_blocking_ = false;

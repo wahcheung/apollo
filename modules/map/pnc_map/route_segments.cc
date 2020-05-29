@@ -46,6 +46,7 @@ void RouteSegments::SetStopForDestination(bool stop_for_destination) {
   stop_for_destination_ = stop_for_destination;
 }
 
+// Note: 判断waypoint是否在LaneSegment内
 bool RouteSegments::WithinLaneSegment(const LaneSegment &lane_segment,
                                       const LaneWaypoint &waypoint) {
   return waypoint.lane &&
@@ -188,6 +189,7 @@ bool RouteSegments::Shrink(const common::math::Vec2d &point,
   return Shrink(sl_point.s(), look_backward, look_forward);
 }
 
+// Note: 把超出[ls - look_backward, s + look_forward]范围的RouteSegments剪掉
 bool RouteSegments::Shrink(const double s, const double look_backward,
                            const double look_forward) {
   LaneWaypoint waypoint;
@@ -202,6 +204,7 @@ bool RouteSegments::Shrink(const double s, const LaneWaypoint &waypoint,
                            const double look_forward) {
   double acc_s = 0.0;
   auto iter = begin();
+  // Note: 找s - look_backward对应的点在的那一段LaneSegment
   while (iter != end() && acc_s + iter->Length() < s - look_backward) {
     acc_s += iter->Length();
     ++iter;
@@ -209,6 +212,8 @@ bool RouteSegments::Shrink(const double s, const LaneWaypoint &waypoint,
   if (iter == end()) {
     return true;
   }
+  // Note: s - look_backward就是新的RouteSegments的起点位置
+  // s - look_backward - acc_s就是距离iter指向的LaneSegment起点有多远
   iter->start_s =
       std::max(iter->start_s, s - look_backward - acc_s + iter->start_s);
   if (iter->Length() < kSegmentationEpsilon) {
@@ -244,6 +249,7 @@ bool RouteSegments::Shrink(const double s, const LaneWaypoint &waypoint,
   return true;
 }
 
+// Note: 获取RouteSegments在s处的LaneWaypoint
 bool RouteSegments::GetWaypoint(const double s, LaneWaypoint *waypoint) const {
   double accumulated_s = 0.0;
   bool has_projection = false;

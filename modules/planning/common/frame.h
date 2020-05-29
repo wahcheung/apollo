@@ -203,6 +203,7 @@ class Frame {
   common::VehicleState vehicle_state_;
   std::list<ReferenceLineInfo> reference_line_info_;
 
+  // Note: 这个意味着下一个waypoint就是终点
   bool is_near_destination_ = false;
 
   /**

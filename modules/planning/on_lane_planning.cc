@@ -144,6 +144,7 @@ Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
   }
   DCHECK_EQ(reference_lines.size(), segments.size());
 
+  // Note: 又Segment/Shrink了一次，这是担心线程延迟较大么...
   auto forward_limit =
       hdmap::PncMap::LookForwardDistance(vehicle_state.linear_velocity());
 

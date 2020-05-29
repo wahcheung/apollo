@@ -271,6 +271,7 @@ class ReferenceLineInfo {
   const common::VehicleState vehicle_state_;
   // Note: 规划起始点
   const common::TrajectoryPoint adc_planning_point_;
+  // Note: ReferenceLineInfo对应的ReferenceLine
   ReferenceLine reference_line_;
 
   /**
@@ -306,9 +307,11 @@ class ReferenceLineInfo {
   planning_internal::Debug debug_;
   LatencyStats latency_stats_;
 
+  // Note: ReferenceLine对应的RouteSegments
   hdmap::RouteSegments lanes_;
 
-  // Note: adc_sl_boundary_与当前参考线的Path有重合
+  // Note: adc_sl_boundary_与当前参考线所在的Lane有交集
+  // Note: 变道过程中，ADC在中间时，很可能两条参考线的这个字段都为true
   bool is_on_reference_line_ = false;
 
   bool is_path_lane_borrow_ = false;

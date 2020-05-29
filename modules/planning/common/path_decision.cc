@@ -28,6 +28,7 @@
 namespace apollo {
 namespace planning {
 
+// Note: 覆盖式添加障碍物(同ID的覆盖)
 Obstacle *PathDecision::AddObstacle(const Obstacle &obstacle) {
   return obstacles_.Add(obstacle.Id(), obstacle);
 }

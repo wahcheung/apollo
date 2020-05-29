@@ -89,6 +89,7 @@ bool DiscretePointsReferenceLineSmoother::Smooth(
   DeNormalizePoints(&smoothed_point2d);
 
   std::vector<ReferencePoint> ref_points;
+  // Note: 把点的heading/kappa/dkappa/lane_waypoints信息加上
   GenerateRefPointProfile(raw_reference_line, smoothed_point2d, &ref_points);
 
   ReferencePoint::RemoveDuplicates(&ref_points);
@@ -222,6 +223,7 @@ void DiscretePointsReferenceLineSmoother::DeNormalizePoints(
                 });
 }
 
+// Note: 把点的heading/kappa/dkappa/lane_waypoints信息加上
 bool DiscretePointsReferenceLineSmoother::GenerateRefPointProfile(
     const ReferenceLine& raw_reference_line,
     const std::vector<std::pair<double, double>>& xy_points,
@@ -237,9 +239,12 @@ bool DiscretePointsReferenceLineSmoother::GenerateRefPointProfile(
   }
 
   // Load into ReferencePoints
+  // Note: 将平滑点(xy_points)投影到raw_reference_line上从而获取
   size_t points_size = xy_points.size();
   for (size_t i = 0; i < points_size; ++i) {
     common::SLPoint ref_sl_point;
+    // Note: 点到raw_reference_line的投影实际上是算的是点到最近的Path Segment的投影
+    // s值是从参考线起点到投影点的累计长度
     if (!raw_reference_line.XYToSL({xy_points[i].first, xy_points[i].second},
                                    &ref_sl_point)) {
       return false;
@@ -250,9 +255,12 @@ bool DiscretePointsReferenceLineSmoother::GenerateRefPointProfile(
       continue;
     }
     ref_sl_point.set_s(std::max(ref_sl_point.s(), 0.0));
+    // Note: 通过插值获取s处的ReferencePoint
     ReferencePoint rlp = raw_reference_line.GetReferencePoint(ref_sl_point.s());
     auto new_lane_waypoints = rlp.lane_waypoints();
     for (auto& lane_waypoint : new_lane_waypoints) {
+      // Note: 这里是唯一修改LaneWaypoint的l值为非零值的地方
+      // 这个l值指的是偏离Lane中心线多远
       lane_waypoint.l = ref_sl_point.l();
     }
     reference_points->emplace_back(ReferencePoint(

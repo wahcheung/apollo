@@ -187,6 +187,7 @@ bool Frame::CreateReferenceLineInfo(
       return false;
     }
     const double offset = first_sl.l() - second_sl.l();
+    // Note: 正值表示另一条参考线在左边，否则在右边
     reference_line_info_.front().SetOffsetToOtherReferenceLine(offset);
     reference_line_info_.back().SetOffsetToOtherReferenceLine(-offset);
   }
@@ -321,11 +322,13 @@ const Obstacle *Frame::CreateStaticVirtualObstacle(const std::string &id,
 }
 
 // Note: 从local_view_中获取obstacle和traffic_light信息
+// 创建ReferenceLineInfo
 Status Frame::Init(
     const std::list<ReferenceLine> &reference_lines,
     const std::list<hdmap::RouteSegments> &segments,
     const std::vector<routing::LaneWaypoint> &future_route_waypoints) {
   // TODO(QiL): refactor this to avoid redundant nullptr checks in scenarios.
+  // Note: 添加预测给的obstacles，从local_view_中读取交通灯信息
   auto status = InitFrameData();
   if (!status.ok()) {
     AERROR << "failed to init frame:" << status.ToString();
@@ -359,8 +362,12 @@ Status Frame::InitFrameData() {
     AlignPredictionTime(vehicle_state_.timestamp(), &prediction);
     local_view_.prediction_obstacles->CopyFrom(prediction);
   }
+
+  // Note: 根据预测结果创建obstacles，动态obstacle如果有多条轨迹预测线，
+  // 则创建多个obstacle(拥有一样的box，但不一样的轨迹)
   for (auto &ptr :
        Obstacle::CreateObstacles(*local_view_.prediction_obstacles)) {
+    // Note: 根据障碍物ID添加障碍物，如果ID重复，则覆盖
     AddObstacle(*ptr);
   }
   if (planning_start_point_.v() < 1e-3) {
@@ -374,6 +381,7 @@ Status Frame::InitFrameData() {
     }
   }
 
+  // Note: 读取local_view中的交通灯信息
   ReadTrafficLights();
 
   ReadPadMsgDrivingAction();
@@ -469,6 +477,7 @@ void Frame::AddObstacle(const Obstacle &obstacle) {
   obstacles_.Add(obstacle.Id(), obstacle);
 }
 
+// Note: 从local_view_中读取交通灯信息
 void Frame::ReadTrafficLights() {
   traffic_lights_.clear();
 
