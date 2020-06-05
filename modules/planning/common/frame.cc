@@ -157,6 +157,7 @@ void Frame::UpdateReferenceLinePriority(
   }
 }
 
+// Note: 主要就是把障碍物信息加入到ReferenceLineInfo中
 bool Frame::CreateReferenceLineInfo(
     const std::list<ReferenceLine> &reference_lines,
     const std::list<hdmap::RouteSegments> &segments) {

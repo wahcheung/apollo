@@ -123,6 +123,7 @@ Status OnLanePlanning::Init(const PlanningConfig& config) {
   return planner_->Init(config_);
 }
 
+// Note: 创建ReferenceLine, 添加Prediction给的障碍物，创建ReferenceLineInfo
 Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
                                  const TrajectoryPoint& planning_start_point,
                                  const VehicleState& vehicle_state) {
@@ -274,7 +275,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
           FLAGS_trajectory_stitching_preserved_length, true,
           last_publishable_trajectory_.get(), &replan_reason);
 
-  // Note: 更新自车信息(位置/(加)速度//EgoBox)/规划起始点
+  // Note: 更新自车信息(位置/(加)速度/EgoBox)/规划起始点
   // EgoBox基于自车实际位置而不是stitched point
   EgoInfo::Instance()->Update(stitching_trajectory.back(), vehicle_state);
   const uint32_t frame_num = static_cast<uint32_t>(seq_num_++);
@@ -288,6 +289,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   if (FLAGS_enable_record_debug) {
     frame_->RecordInputDebug(ptr_trajectory_pb->mutable_debug());
   }
+  // 记录Frame初始化耗时
   ptr_trajectory_pb->mutable_latency_stats()->set_init_frame_time_ms(
       Clock::NowInSeconds() - start_timestamp);
   // Note: Frame初始化失败，触发紧急停车
@@ -478,6 +480,7 @@ Status OnLanePlanning::Plan(
     frame_->mutable_open_space_info()->sync_debug_instance();
   }
 
+  // Note: 进入规划主流程
   auto status = planner_->Plan(stitching_trajectory.back(), frame_.get(),
                                ptr_trajectory_pb);
 

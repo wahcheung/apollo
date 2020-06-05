@@ -116,6 +116,7 @@ Stage::StageStatus LaneFollowStage::Process(
 
   unsigned int count = 0;
 
+  // Note: 尝试在每一条参考线上做规划
   for (auto& reference_line_info : *frame->mutable_reference_line_info()) {
     // TODO(SHU): need refactor
     if (count++ == frame->mutable_reference_line_info()->size()) {
@@ -166,10 +167,12 @@ Stage::StageStatus LaneFollowStage::Process(
                                      : StageStatus::ERROR;
 }
 
+// Note: 对每一条初始化成功的ReferenceLineInfo都会执行这个规划流程
 Status LaneFollowStage::PlanOnReferenceLine(
     const TrajectoryPoint& planning_start_point, Frame* frame,
     ReferenceLineInfo* reference_line_info) {
   if (!reference_line_info->IsChangeLanePath()) {
+    // Note: 给直行的参考线一个惩罚
     reference_line_info->AddCost(kStraightForwardLineCost);
   }
   ADEBUG << "planning start point:" << planning_start_point.DebugString();
@@ -206,6 +209,7 @@ Status LaneFollowStage::PlanOnReferenceLine(
 
   // check path and speed results for path or speed fallback
   reference_line_info->set_trajectory_type(ADCTrajectory::NORMAL);
+  // Note: 正常规划失败，进入Fallback规划流程
   if (!ret.ok()) {
     PlanFallbackTrajectory(planning_start_point, frame, reference_line_info);
   }

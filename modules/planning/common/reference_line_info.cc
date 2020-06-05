@@ -557,6 +557,10 @@ void ReferenceLineInfo::SetDrivable(bool drivable) { is_drivable_ = drivable; }
 bool ReferenceLineInfo::IsDrivable() const { return is_drivable_; }
 
 // Note: 自车不在这个Passage中
+/**
+ * Check if the current reference line is a change lane reference line, i.e.,
+ * ADC's current position is not on this reference line.
+ */
 bool ReferenceLineInfo::IsChangeLanePath() const {
   return !Lanes().IsOnSegment();
 }

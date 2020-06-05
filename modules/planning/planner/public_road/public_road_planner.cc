@@ -31,9 +31,11 @@ Status PublicRoadPlanner::Init(const PlanningConfig& config) {
   return Status::OK();
 }
 
+// Note: 不同的场景有不同的细分的Stage，然后执行特定Stage的Tasks
 Status PublicRoadPlanner::Plan(const TrajectoryPoint& planning_start_point,
                                Frame* frame,
                                ADCTrajectory* ptr_computed_trajectory) {
+  // Note: 场景更新
   scenario_manager_.Update(planning_start_point, *frame);
   scenario_ = scenario_manager_.mutable_scenario();
   auto result = scenario_->Process(planning_start_point, frame);
