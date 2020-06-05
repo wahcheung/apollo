@@ -51,6 +51,7 @@ Status LaneChangeDecider::Process(
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
+  // Note: 优先变道
   if (lane_change_decider_config.reckless_change_lane()) {
     PrioritizeChangeLane(true, reference_line_info);
     return Status::OK();
@@ -67,6 +68,7 @@ Status LaneChangeDecider::Process(
         IsClearToChangeLane(current_reference_line_info));
   }
 
+  // Note: 从未设置过变道状态(第一次进入规划流程，第一轮规划)
   if (!prev_status->has_status()) {
     UpdateStatus(now, ChangeLaneStatus::CHANGE_LANE_FINISHED,
                  GetCurrentPathId(*reference_line_info));
@@ -76,12 +78,16 @@ Status LaneChangeDecider::Process(
 
   bool has_change_lane = reference_line_info->size() > 1;
   ADEBUG << "has_change_lane: " << has_change_lane;
+  // Note: 非变道场景
   if (!has_change_lane) {
     const auto& path_id = reference_line_info->front().Lanes().Id();
     if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FINISHED) {
+      // Note: 之前的状态就是变道完成，也没有处于变道场景，无需做任何操作
     } else if (prev_status->status() == ChangeLaneStatus::IN_CHANGE_LANE) {
+      // Note: 之前还在变道，但当前只有一条参考线，表明已经进入目标车道，变道完成
       UpdateStatus(now, ChangeLaneStatus::CHANGE_LANE_FINISHED, path_id);
     } else if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FAILED) {
+      // Note: 变道失败，但却进入了目标车道，不更新一下状态么？
     } else {
       const std::string msg =
           absl::StrCat("Unknown state: ", prev_status->ShortDebugString());
@@ -98,8 +104,12 @@ Status LaneChangeDecider::Process(
     }
     if (prev_status->status() == ChangeLaneStatus::IN_CHANGE_LANE) {
       if (prev_status->path_id() == current_path_id) {
+        // Note: 还没变道过去
+        // Note: 优先变道
         PrioritizeChangeLane(true, reference_line_info);
       } else {
+        // Note: 已经变道到目标车道了，变道完成
+        // Note: 这里包含连续变道的可能性，连续变道前，已经变道一次了，先置变道状态为成功
         // RemoveChangeLane(reference_line_info);
         PrioritizeChangeLane(false, reference_line_info);
         ADEBUG << "removed change lane.";
@@ -124,10 +134,12 @@ Status LaneChangeDecider::Process(
                ChangeLaneStatus::CHANGE_LANE_FINISHED) {
       if (now - prev_status->timestamp() <
           lane_change_decider_config.change_lane_success_freeze_time()) {
+        // Note: 短时间内连续变道太危险了，等技能冷却，先优先保持当前Path
         // RemoveChangeLane(reference_line_info);
         PrioritizeChangeLane(false, reference_line_info);
         ADEBUG << "freezed after completed lane change";
       } else {
+        // Note: 进入变道场景，优先变道
         PrioritizeChangeLane(true, reference_line_info);
         UpdateStatus(now, ChangeLaneStatus::IN_CHANGE_LANE, current_path_id);
         ADEBUG << "change lane again after success";
@@ -201,6 +213,7 @@ void LaneChangeDecider::UpdateStatus(double timestamp,
   lane_change_status->set_status(status_code);
 }
 
+// Note: 如果变道优先则将ChangeLanePath放到前面，否则将非变道Path放到前面
 void LaneChangeDecider::PrioritizeChangeLane(
     const bool is_prioritize_change_lane,
     std::list<ReferenceLineInfo>* reference_line_info) const {
@@ -229,6 +242,7 @@ void LaneChangeDecider::PrioritizeChangeLane(
     }
     ++iter;
   }
+  // Note: 将Lane Change ReferenceLine放到前面
   reference_line_info->splice(reference_line_info->begin(),
                               *reference_line_info, iter);
   ADEBUG << "reference_line_info->IsChangeLanePath(): "
@@ -254,6 +268,7 @@ void LaneChangeDecider::RemoveChangeLane(
   }
 }
 
+// Note: Vehicle所在的车道
 std::string LaneChangeDecider::GetCurrentPathId(
     const std::list<ReferenceLineInfo>& reference_line_info) const {
   for (const auto& info : reference_line_info) {
