@@ -42,6 +42,7 @@ using apollo::hdmap::JunctionInfo;
 
 namespace {
 // PathBoundPoint contains: (s, l_min, l_max).
+// Note: 这里的宽度是相对于参考线而言的，不是Lane中心线
 using PathBoundPoint = std::tuple<double, double, double>;
 // PathBound contains a vector of PathBoundPoints.
 using PathBound = std::vector<PathBoundPoint>;
@@ -67,9 +68,11 @@ Status PathBoundsDecider::Process(
   // const TaskConfig& config = Decider::config_;
 
   // Initialization.
+  // Note: 初始化ADC位置信息，初始化ADC所处的Lane的宽度
   InitPathBoundsDecider(*frame, *reference_line_info);
 
   // Generate the fallback path boundary.
+  // Note: Fallback PathBound不考虑障碍物，只考虑ADC状态和当前Lane
   PathBound fallback_path_bound;
   Status ret =
       GenerateFallbackPathBound(*reference_line_info, &fallback_path_bound);
@@ -82,6 +85,7 @@ Status PathBoundsDecider::Process(
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
+  // Note: 确认ADC处于fallback_path_bound范围内
   if (!fallback_path_bound.empty()) {
     CHECK_LE(adc_frenet_l_, std::get<2>(fallback_path_bound[0]));
     CHECK_GE(adc_frenet_l_, std::get<1>(fallback_path_bound[0]));
@@ -184,6 +188,7 @@ Status PathBoundsDecider::Process(
   std::vector<LaneBorrowInfo> lane_borrow_info_list;
   lane_borrow_info_list.push_back(LaneBorrowInfo::NO_BORROW);
 
+  // Note: 如果在PathLaneBorrowDecider中判断为需要借道，则生成对应的借道类型的PathBound
   if (reference_line_info->is_path_lane_borrow()) {
     const auto& path_decider_status =
         PlanningContext::Instance()->planning_status().path_decider();
@@ -210,6 +215,8 @@ Status PathBoundsDecider::Process(
     if (!ret.ok()) {
       continue;
     }
+    // Note: 由于GenerateRegularPathBound里面把regular_path_bound
+    // 延长了kNumExtraTailBoundPoint，因此这里几乎不可能为空的
     if (regular_path_bound.empty()) {
       continue;
     }
@@ -255,6 +262,7 @@ Status PathBoundsDecider::Process(
   return Status::OK();
 }
 
+// Note: 初始化ADC位置信息，所处的Lane的宽度
 void PathBoundsDecider::InitPathBoundsDecider(
     const Frame& frame, const ReferenceLineInfo& reference_line_info) {
   const ReferenceLine& reference_line = reference_line_info.reference_line();
@@ -282,6 +290,7 @@ void PathBoundsDecider::InitPathBoundsDecider(
   // ADC's lane width.
   double lane_left_width = 0.0;
   double lane_right_width = 0.0;
+  // Note: 这个是获取的是参考线到Lane左右边界距离，即这个宽度是相对于参考线而言
   if (!reference_line.GetLaneWidth(adc_frenet_s_, &lane_left_width,
                                    &lane_right_width)) {
     AWARN << "Failed to get lane width at planning start point.";
@@ -305,6 +314,14 @@ common::TrajectoryPoint PathBoundsDecider::InferFrontAxeCenterFromRearAxeCenter(
   return ret;
 }
 
+/** @brief The regular path boundary generation considers the ADC itself
+ *   and other static environments:
+ *   - ADC's position (lane-changing considerations)
+ *   - lane info
+ *   - static obstacles
+ *   The philosophy is: static environment must be and can only be taken
+ *   care of by the path planning.
+ */
 Status PathBoundsDecider::GenerateRegularPathBound(
     const ReferenceLineInfo& reference_line_info,
     const LaneBorrowInfo& lane_borrow_info, PathBound* const path_bound,
@@ -343,6 +360,8 @@ Status PathBoundsDecider::GenerateRegularPathBound(
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
   // Append some extra path bound points to avoid zero-length path data.
+  // Note: 被障碍物挡住的时候，把boundary的往前扩充一定距离(10米)
+  // Note: 这个操作导致Regular PathBound几乎不可能是空的(除非自车在参考线的末尾?)
   int counter = 0;
   while (!blocking_obstacle_id->empty() &&
          path_bound->size() < temp_path_bound.size() &&
@@ -511,6 +530,19 @@ Status PathBoundsDecider::GeneratePullOverPathBound(
   return Status::OK();
 }
 
+// Note: 自带的注释很详细，直接从头文件copy过来
+/** @brief The fallback path only considers:
+ *   - ADC's position (so that boundary must contain ADC's position)
+ *   - lane info
+ *   It is supposed to be the last resort in case regular path generation
+ *   fails so that speed decider can at least have some path and won't
+ *   fail drastically.
+ *   Therefore, it be reliable so that optimizer will not likely to
+ *   fail with this boundary, and therefore doesn't consider any static
+ *   obstacle. When the fallback path is used, stopping before static
+ *   obstacles should be taken care of by the speed decider. Also, it
+ *   doesn't consider any lane-borrowing.
+ */
 Status PathBoundsDecider::GenerateFallbackPathBound(
     const ReferenceLineInfo& reference_line_info, PathBound* const path_bound) {
   // 1. Initialize the path boundaries to be an indefinitely large area.
@@ -524,6 +556,7 @@ Status PathBoundsDecider::GenerateFallbackPathBound(
 
   // 2. Decide a rough boundary based on lane info and ADC's position
   std::string dummy_borrow_lane_type;
+  // Note: FallbackPathBound不借道，buffer大一点，为0.5m
   if (!GetBoundaryFromLanesAndADC(reference_line_info,
                                   LaneBorrowInfo::NO_BORROW, 0.5, path_bound,
                                   &dummy_borrow_lane_type)) {
@@ -879,7 +912,7 @@ bool PathBoundsDecider::IsContained(
 }
 
 // Note: 初始化path_bound，包括长度、宽度和采样间隔
-// 从ADC所在s处开始，间隔0.5米，初始化前方100米长度的boundary为无穷大
+// 从ADC所在s处开始，间隔0.5米，初始化前方(>100米)长度的boundary为无穷大
 bool PathBoundsDecider::InitPathBoundary(
     const ReferenceLineInfo& reference_line_info, PathBound* const path_bound) {
   // Sanity checks.
@@ -1096,6 +1129,18 @@ bool PathBoundsDecider::GetBoundaryFromADC(
 }
 
 // TODO(jiacheng): this function is to be retired soon.
+// Note: 根据对应的借道方式计算Boundary，如果没有同向的Neighbour Lane则会借道逆向的Lane
+// 计算Boundary时为了处理车跑出Lane边界的情况，会根据ADC位置和横向速度处理Boundary
+// Note: 根据ADC位置和速度信息算一个boundary(curr_left/right_bound_adc)，
+// 再根据实际的Lane边界信息算一个boundary(curr_left/right_bound_lane),
+// 取两个boundary中较宽的一个
+// ADC_buffer就是给curr_left/right_bound_adc再扩充一下
+/** @brief Refine the boundary based on lane-info and ADC's location.
+ *   It will comply to the lane-boundary. However, if the ADC itself
+ *   is out of the given lane(s), it will adjust the boundary
+ *   accordingly to include ADC's current position.
+ */
+// Note: 这个不考虑障碍物
 bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
     const ReferenceLineInfo& reference_line_info,
     const LaneBorrowInfo& lane_borrow_info, double ADC_buffer,
@@ -1117,12 +1162,14 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
     // 1. Get the current lane width at current point.
     double curr_lane_left_width = 0.0;
     double curr_lane_right_width = 0.0;
+    // Note: 这个是获取的是参考线到Lane左右边界距离，即这个宽度是相对于参考线而言
     if (!reference_line.GetLaneWidth(curr_s, &curr_lane_left_width,
                                      &curr_lane_right_width)) {
       AWARN << "Failed to get lane width at s = " << curr_s;
       curr_lane_left_width = past_lane_left_width;
       curr_lane_right_width = past_lane_right_width;
     } else {
+      // Note: 这里把curr_lane_left_width/curr_lane_right_width转为Lane的左右宽度了
       double offset_to_lane_center = 0.0;
       reference_line.GetOffsetToMap(curr_s, &offset_to_lane_center);
       curr_lane_left_width += offset_to_lane_center;
@@ -1132,6 +1179,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
     }
 
     // 2. Get the neighbor lane widths at the current point.
+    // Note: 借道的Lane的宽度
     double curr_neighbor_lane_width = 0.0;
     if (CheckLaneBoundaryType(reference_line_info, curr_s, lane_borrow_info)) {
       hdmap::Id neighbor_lane_id;
@@ -1185,6 +1233,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
         std::fmax(adc_l_to_lane_center_,
                   adc_l_to_lane_center_ + ADC_speed_buffer) +
         GetBufferBetweenADCCenterAndEdge() + ADC_buffer;
+    // Note: 这里又把offset_to_map减掉了，这个curr_left_bound是相对于参考线而言的
     double curr_left_bound =
         std::fmax(curr_left_bound_lane, curr_left_bound_adc) - offset_to_map;
 
@@ -1197,6 +1246,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
         std::fmin(adc_l_to_lane_center_,
                   adc_l_to_lane_center_ + ADC_speed_buffer) -
         GetBufferBetweenADCCenterAndEdge() - ADC_buffer;
+    // Note: 这里又把offset_to_map减掉了，这个curr_right_bound是相对与参考线而言的
     double curr_right_bound =
         std::fmin(curr_right_bound_lane, curr_right_bound_adc) - offset_to_map;
 
@@ -1208,6 +1258,7 @@ bool PathBoundsDecider::GetBoundaryFromLanesAndADC(
     // 4. Update the boundary.
     double dummy = 0.0;
     // Note: 堵塞点的边界不被更新
+    // Note: 更新ADC中心点的可行驶区域curr_left_bound/curr_right_bound往中间缩小半个车宽
     if (!UpdatePathBoundaryAndCenterLine(i, curr_left_bound, curr_right_bound,
                                          path_bound, &dummy)) {
       path_blocked_idx = static_cast<int>(i);
@@ -1336,8 +1387,10 @@ bool PathBoundsDecider::GetBoundaryFromStaticObstacles(
   double center_line = adc_frenet_l_;
   size_t obs_idx = 0;
   int path_blocked_idx = -1;
+  // Note: 降序排列(greater value在前)
   std::multiset<double, std::greater<double>> right_bounds;
   right_bounds.insert(std::numeric_limits<double>::lowest());
+  // Note: multiset默认升序排列
   std::multiset<double> left_bounds;
   left_bounds.insert(std::numeric_limits<double>::max());
   // Maps obstacle ID's to the decided ADC pass direction, if ADC should
@@ -1359,15 +1412,18 @@ bool PathBoundsDecider::GetBoundaryFromStaticObstacles(
         double curr_obstacle_l_min = std::get<2>(curr_obstacle);
         double curr_obstacle_l_max = std::get<3>(curr_obstacle);
         std::string curr_obstacle_id = std::get<4>(curr_obstacle);
+        // Note: 障碍物start_s建的obstacle boundary
         if (std::get<0>(curr_obstacle) == 1) {
           // A new obstacle enters into our scope:
           //   - Decide which direction for the ADC to pass.
           //   - Update the left/right bound accordingly.
           //   - If boundaries blocked, then decide whether can side-pass.
           //   - If yes, then borrow neighbor lane to side-pass.
+          // Note: 根据障碍物车尾中心的横向位置判断超车方向
           if (curr_obstacle_l_min + curr_obstacle_l_max < center_line * 2) {
             // Obstacle is to the right of center-line, should pass from left.
             obs_id_to_direction[curr_obstacle_id] = true;
+            // Note: 从障碍物左侧side pass，更新可行驶区域的右边界
             right_bounds.insert(curr_obstacle_l_max);
             if (!UpdatePathBoundaryAndCenterLine(
                     i, *left_bounds.begin(), *right_bounds.begin(),
@@ -1379,6 +1435,7 @@ bool PathBoundsDecider::GetBoundaryFromStaticObstacles(
           } else {
             // Obstacle is to the left of center-line, should pass from right.
             obs_id_to_direction[curr_obstacle_id] = false;
+            // Note: 从障碍物右侧side pass，更新可行驶区域的左边界
             left_bounds.insert(curr_obstacle_l_min);
             if (!UpdatePathBoundaryAndCenterLine(
                     i, *left_bounds.begin(), *right_bounds.begin(),
@@ -1390,9 +1447,12 @@ bool PathBoundsDecider::GetBoundaryFromStaticObstacles(
           }
         } else {
           // An existing obstacle exits our scope.
+          // Note: 越过障碍物，该障碍物的边界约束不复存在
           if (obs_id_to_direction[curr_obstacle_id]) {
+            // Note: pass from left side of obstacle
             right_bounds.erase(right_bounds.find(curr_obstacle_l_max));
           } else {
+            // Note: pass from right side of obstacle
             left_bounds.erase(left_bounds.find(curr_obstacle_l_min));
           }
           obs_id_to_direction.erase(curr_obstacle_id);
@@ -1454,6 +1514,8 @@ bool PathBoundsDecider::GetBoundaryFromStaticObstacles(
 }
 
 // The tuple contains (is_start_s, s, l_min, l_max, obstacle_id)
+// Note: 把obstacles的车头车尾分开做边界判断，障碍物的前后左右边界都添加了buffer
+// Note: 会过滤行驶中的障碍物(只考虑静态和超低速障碍物)
 std::vector<ObstacleEdge> PathBoundsDecider::SortObstaclesForSweepLine(
     const IndexedList<std::string, Obstacle>& indexed_obstacles) {
   std::vector<ObstacleEdge> sorted_obstacles;
@@ -1461,6 +1523,7 @@ std::vector<ObstacleEdge> PathBoundsDecider::SortObstaclesForSweepLine(
   // Go through every obstacle and preprocess it.
   for (const auto* obstacle : indexed_obstacles.Items()) {
     // Only focus on those within-scope obstacles.
+    // Note: 过滤行驶中的障碍物(只考虑静态和超低速障碍物)
     if (!IsWithinPathDeciderScopeObstacle(*obstacle)) {
       continue;
     }
@@ -1704,7 +1767,7 @@ std::vector<std::vector<bool>> PathBoundsDecider::DecidePassDirections(
   return decisions;
 }
 
-// Note: 目前就是简单返回自车半个宽度
+// Note: 目前就是简单返回自车半宽
 double PathBoundsDecider::GetBufferBetweenADCCenterAndEdge() {
   double adc_half_width =
       VehicleConfigHelper::GetConfig().vehicle_param().width() / 2.0;
@@ -1790,6 +1853,7 @@ void PathBoundsDecider::PathBoundsDebugString(
   }
 }
 
+// Note: 查看指定位置处是否可以按照指定方式借道(检查LaneBoundaryType)
 bool PathBoundsDecider::CheckLaneBoundaryType(
     const ReferenceLineInfo& reference_line_info, const double check_s,
     const LaneBorrowInfo& lane_borrow_info) {

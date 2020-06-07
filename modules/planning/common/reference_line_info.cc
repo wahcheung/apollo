@@ -144,6 +144,7 @@ double ReferenceLineInfo::GetCruiseSpeed() const {
   return cruise_speed_ > 0.0 ? cruise_speed_ : FLAGS_default_cruise_speed;
 }
 
+// Note: 通过s处的LaneWaypoint信息找到对应的Lanes
 hdmap::LaneInfoConstPtr ReferenceLineInfo::LocateLaneInfo(
     const double s) const {
   std::vector<hdmap::LaneInfoConstPtr> lanes;
@@ -156,6 +157,7 @@ hdmap::LaneInfoConstPtr ReferenceLineInfo::LocateLaneInfo(
   return lanes.front();
 }
 
+// Note: 查询Neighbor车道的ID和宽度
 bool ReferenceLineInfo::GetNeighborLaneInfo(
     const ReferenceLineInfo::LaneType lane_type, const double s,
     hdmap::Id* ptr_lane_id, double* ptr_lane_width) const {

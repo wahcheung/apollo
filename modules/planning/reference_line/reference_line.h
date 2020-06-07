@@ -226,6 +226,7 @@ class ReferenceLine {
   // Note: LaneWaypoint的l值表示这个参考线上的点距离生成参考线的Lane的中心线有多远
   // (正值表示点在Lane中心线左边，负值表示点在Lane中心线的右边)
   // l值的计算可以参考DiscretePointsReferenceLineSmoother::GenerateRefPointProfile
+  // Note: 平滑参考线上的点
   std::vector<ReferencePoint> reference_points_;
   // Note: Path就是将Passage看作一条Lane了，用于提供Passage上的各种细节信息
   // Note: 原始非平滑ReferenceLane构造时传入的Path或平滑参考线之后传入的reference_points构造的Path
