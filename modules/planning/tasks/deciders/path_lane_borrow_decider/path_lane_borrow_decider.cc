@@ -106,6 +106,7 @@ bool PathLaneBorrowDecider::IsNecessaryToBorrowLane(
       // first time init decided_side_pass_direction
       bool left_borrowable;
       bool right_borrowable;
+      // Note: 检查Lane边界是否允许变道(前方100米)
       CheckLaneBorrow(reference_line_info, &left_borrowable, &right_borrowable);
       if (!left_borrowable && !right_borrowable) {
         mutable_path_decider_status->set_is_in_path_lane_borrow_scenario(false);
@@ -261,6 +262,7 @@ bool PathLaneBorrowDecider::IsSidePassableObstacle(
   return IsNonmovableObstacle(reference_line_info, *blocking_obstacle);
 }
 
+// Note: 检查ADC前方100米范围内是否允许变道(检查Lane边界类型)
 void PathLaneBorrowDecider::CheckLaneBorrow(
     const ReferenceLineInfo& reference_line_info,
     bool* left_neighbor_lane_borrowable, bool* right_neighbor_lane_borrowable) {
