@@ -414,6 +414,8 @@ Obstacle* ReferenceLineInfo::AddObstacle(const Obstacle* obstacle) {
   return mutable_obstacle;
 }
 
+// Note: 添加障碍物，计算障碍物的SlBoundary，添加障碍物的is_lane_blocking_属性
+// Note: 障碍物保存在path_decision_中
 bool ReferenceLineInfo::AddObstacles(
     const std::vector<const Obstacle*>& obstacles) {
   if (FLAGS_use_multi_thread_to_add_obstacles) {

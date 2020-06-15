@@ -284,9 +284,13 @@ class ReferenceLineInfo {
 
   PathDecision path_decision_;
 
+  // Note: valid_path_data.front().blocking_obstacle_id()对应的Obstacle
   Obstacle* blocking_obstacle_;
 
+  // Note: 在PathBoundsDecider中成功生成的PathBound
   std::vector<PathBoundary> candidate_path_boundaries_;
+  // Note: 1. 在PiecewiseJerkPathOptimizer中成功生成的Path
+  //       2. 在PathAssessmentDecider中排好序的Path
   std::vector<PathData> candidate_path_data_;
 
   PathData path_data_;

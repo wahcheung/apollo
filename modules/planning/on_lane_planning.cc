@@ -164,6 +164,7 @@ Status OnLanePlanning::InitFrame(const uint32_t sequence_num,
     }
   }
 
+  // Note: 在这里面创建ReferenceLineInfo
   auto status = frame_->Init(reference_lines, segments,
                              reference_line_provider_->FutureRouteWaypoints());
   if (!status.ok()) {

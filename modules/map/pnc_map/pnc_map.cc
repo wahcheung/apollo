@@ -674,7 +674,9 @@ LaneInfoConstPtr PncMap::GetRouteSuccessor(LaneInfoConstPtr lane) const {
   return hdmap_->GetLaneById(preferred_id);
 }
 
-// Note: 在routing结果中查找当前lane的predecessor lane
+// Note: 在routing结果中查找当前Lane的predecessor lane
+// Note: 如果在routing结果中没找到predecessor_id里面的ID，
+// 则直接返回predecessor_id(0)
 LaneInfoConstPtr PncMap::GetRoutePredecessor(LaneInfoConstPtr lane) const {
   if (lane->lane().predecessor_id().empty()) {
     return nullptr;
