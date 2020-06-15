@@ -82,6 +82,7 @@ common::Status PiecewiseJerkPathOptimizer::Process(
   for (const auto& path_boundary : path_boundaries) {
     // if the path_boundary is normal, it is possible to have less than 2 points
     // skip path boundary of this kind
+    // Note: 从目前的PathBoundsDecider看来，这个点数不会少于2
     if (path_boundary.label().find("regular") != std::string::npos &&
         path_boundary.boundary().size() < 2) {
       continue;
@@ -112,6 +113,7 @@ common::Status PiecewiseJerkPathOptimizer::Process(
           path_boundary.label().find("pullover") != std::string::npos) {
         common::SLPoint pull_over_sl;
         reference_line.XYToSL(pull_over_status.position(), &pull_over_sl);
+        // Note: PullOver场景下将PullOver位置的l值作为参考值
         end_state[0] = pull_over_sl.l();
       }
     }
