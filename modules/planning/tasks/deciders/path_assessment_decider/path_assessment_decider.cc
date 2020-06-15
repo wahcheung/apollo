@@ -70,6 +70,7 @@ Status PathAssessmentDecider::Process(
     // RecordDebugInfo(curr_path_data, curr_path_data.path_label(),
     //                 reference_line_info);
     if (curr_path_data.path_label().find("fallback") != std::string::npos) {
+      // Note: 简单检查Path是否大幅度偏离参考线和Road
       if (IsValidFallbackPath(*reference_line_info, curr_path_data)) {
         valid_path_data.push_back(curr_path_data);
       }
@@ -91,6 +92,7 @@ Status PathAssessmentDecider::Process(
     auto& curr_path_data = valid_path_data[i];
     if (curr_path_data.path_label().find("fallback") != std::string::npos) {
       // remove empty path_data.
+      // Note: curr_path_data有empty的可能性么?
       if (!curr_path_data.Empty()) {
         if (cnt != i) {
           valid_path_data[cnt] = curr_path_data;
@@ -99,9 +101,11 @@ Status PathAssessmentDecider::Process(
       }
       continue;
     }
+    // Note: 标记每个Frenet PathPoint的类型
     SetPathInfo(*reference_line_info, &curr_path_data);
     // Trim all the lane-borrowing paths so that it ends with an in-lane
     // position.
+    // Note: 为什么要删掉Path后面的Out Lane的点呢?
     if (curr_path_data.path_label().find("pullover") == std::string::npos) {
       TrimTailingOutLanePoints(&curr_path_data);
     }
@@ -145,6 +149,7 @@ Status PathAssessmentDecider::Process(
 
   ADEBUG << "Using '" << valid_path_data.front().path_label()
          << "' path out of " << valid_path_data.size() << " path(s)";
+  // Note: 给fallback的轨迹一个较大的nudge距离
   if (valid_path_data.front().path_label().find("fallback") !=
       std::string::npos) {
     FLAGS_static_obstacle_nudge_l_buffer = 0.8;
@@ -267,6 +272,7 @@ bool ComparePathData(const PathData& lhs, const PathData& rhs,
   double lhs_path_length = lhs.frenet_frame_path().back().s();
   double rhs_path_length = rhs.frenet_frame_path().back().s();
   if (lhs_on_selflane || rhs_on_selflane) {
+    // Note: self Path与其他Path比较
     if (std::fabs(lhs_path_length - rhs_path_length) >
         kSelfPathLengthComparisonTolerance) {
       return lhs_path_length > rhs_path_length;
@@ -274,6 +280,7 @@ bool ComparePathData(const PathData& lhs, const PathData& rhs,
       return lhs_on_selflane;
     }
   } else {
+    // Note: 两条借道的Path比较
     if (std::fabs(lhs_path_length - rhs_path_length) >
         kNeighborPathLengthComparisonTolerance) {
       return lhs_path_length > rhs_path_length;
@@ -390,6 +397,7 @@ bool PathAssessmentDecider::IsValidFallbackPath(
   return true;
 }
 
+// Note: 设置Path中每个frenet_path_point的类型
 void PathAssessmentDecider::SetPathInfo(
     const ReferenceLineInfo& reference_line_info, PathData* const path_data) {
   // Go through every path_point, and label its:
@@ -407,6 +415,7 @@ void PathAssessmentDecider::SetPathInfo(
     SetPathPointType(reference_line_info, *path_data, true, &path_decision);
   } else {
     // Otherwise, only do the label for borrow-lane generated paths.
+    // Note: 只对regular的left/right/pullover类型的Path的PathPoint做类型标注
     if (path_data->path_label().find("fallback") == std::string::npos &&
         path_data->path_label().find("self") == std::string::npos) {
       SetPathPointType(reference_line_info, *path_data, false, &path_decision);
@@ -449,6 +458,7 @@ void PathAssessmentDecider::TrimTailingOutLanePoints(
   path_data->SetPathPointDecisionGuide(std::move(path_point_decision));
 }
 
+// Note: 检查Path是否大幅度偏离参考线
 bool PathAssessmentDecider::IsGreatlyOffReferenceLine(
     const PathData& path_data) {
   static constexpr double kOffReferenceLineThreshold = 20.0;
@@ -463,6 +473,7 @@ bool PathAssessmentDecider::IsGreatlyOffReferenceLine(
   return false;
 }
 
+// Note: 检查Path是否大幅度偏离Road
 bool PathAssessmentDecider::IsGreatlyOffRoad(
     const ReferenceLineInfo& reference_line_info, const PathData& path_data) {
   static constexpr double kOffRoadThreshold = 10.0;
@@ -558,6 +569,8 @@ bool PathAssessmentDecider::IsStopOnReverseNeighborLane(
     return false;
   }
 
+  // Note: 到这里还没对真实障碍物做决策，是不是还没有障碍物的Stop Fence?
+  // Note: 这里的stop point都是红绿灯之类的停止点?
   double check_s = 0.0;
   static constexpr double kLookForwardBuffer =
       5.0;  // filter out sidepass stop fence
@@ -580,6 +593,7 @@ bool PathAssessmentDecider::IsStopOnReverseNeighborLane(
     return false;
   }
 
+  // Note: 找距离check_s最近的PathPoint
   static constexpr double kSDelta = 0.3;
   common::SLPoint path_point_sl;
   for (const auto& frenet_path_point : path_data.frenet_frame_path()) {
@@ -632,6 +646,9 @@ void PathAssessmentDecider::InitPathPointDecision(
   }
 }
 
+// Note: 对变Lane Change Path和借道的Path的处理不一样
+// 借道的Path的PathPoint只要不在参考线所在的Lane中，
+// 就是OUT_ON_FORWARD_LANE或者OUT_ON_REVERSE_LANE
 void PathAssessmentDecider::SetPathPointType(
     const ReferenceLineInfo& reference_line_info, const PathData& path_data,
     const bool is_lane_change_path,
@@ -678,10 +695,15 @@ void PathAssessmentDecider::SetPathPointType(
 
       // Check for lane-change and lane-borrow differently:
       if (is_lane_change_path) {
+        // Note: Lane Change Path意味着当前Path是变道的目标Path
+        // Note: 对于变道Path,
+        // 在变道前的车道内和目标车道内的PathPoint都标记为IN_LANE
+        // 处于变道中间位置的PathPoint才被标记为OUT_ON_FORWARD_LANE
         // For lane-change path, only transitioning part is labeled as
         // out-of-lane.
         if (ego_sl_boundary.start_l() > lane_left_width ||
             ego_sl_boundary.end_l() < -lane_right_width) {
+          // Note: 自车的左右边沿都还没进入变道的目标Lane
           // This means that ADC hasn't started lane-change yet.
           std::get<1>((*path_point_decision)[i]) =
               PathData::PathPointType::IN_LANE;
@@ -689,15 +711,18 @@ void PathAssessmentDecider::SetPathPointType(
                        -lane_right_width + back_to_inlane_extra_buffer &&
                    ego_sl_boundary.end_l() <
                        lane_left_width - back_to_inlane_extra_buffer) {
+          // Note: ADC进入变道的目标车道了
           // This means that ADC has safely completed lane-change with margin.
           std::get<1>((*path_point_decision)[i]) =
               PathData::PathPointType::IN_LANE;
         } else {
+          // Note: ADC处于两条车道的中间位置
           // ADC is right across two lanes.
           std::get<1>((*path_point_decision)[i]) =
               PathData::PathPointType::OUT_ON_FORWARD_LANE;
         }
       } else {
+        // Note: 借道Path
         // For lane-borrow path, as long as ADC is not on the lane of
         // reference-line, it is out on other lanes. It might even be
         // on reverse lane!
@@ -713,6 +738,7 @@ void PathAssessmentDecider::SetPathPointType(
             std::get<1>((*path_point_decision)[i]) =
                 PathData::PathPointType::OUT_ON_FORWARD_LANE;
           } else {
+            // Note: PullOver不管
             std::get<1>((*path_point_decision)[i]) =
                 PathData::PathPointType::UNKNOWN;
           }
