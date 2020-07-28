@@ -203,19 +203,26 @@ class STObstaclesProcessor {
 
   // A vector of sorted obstacle's t-edges:
   //  (is_starting_t, t, s_min, s_max, obs_id).
+  // Note: ST图中障碍物boundary的左右两条平行的边，即对应min_t和max_t的edge
+  // Note: 已经按照start_t从小到大排序
   std::vector<std::tuple<int, double, double, double, std::string>>
       obs_t_edges_;
   int obs_t_edges_idx_;
 
   std::unordered_map<std::string, STBoundary> obs_id_to_st_boundary_;
+  // Note: 对障碍物的decision
   std::unordered_map<std::string, ObjectDecisionType> obs_id_to_decision_;
 
   std::vector<std::tuple<std::string, STBoundary, Obstacle*>>
       candidate_clear_zones_;
 
+  // Note: 障碍物ID对应的alternative_st_boundary
+  // Note: 这里面的障碍物的boundary经过删减，删除了低路权之后的点
+  // Note: 比obs_id_to_st_boundary_多了静态障碍物
   std::unordered_map<std::string, STBoundary>
       obs_id_to_alternative_st_boundary_;
 
+  // Note: 记录ADC Path哪些segment是OUT_ON_FORWARD_LANE/OUT_ON_REVERSE_LANE的
   std::vector<std::pair<double, double>> adc_low_road_right_segments_;
 
   History* history_ = History::Instance();

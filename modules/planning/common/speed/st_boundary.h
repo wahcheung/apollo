@@ -168,11 +168,16 @@ class STBoundary : public common::math::Polygon2d {
   std::vector<STPoint> upper_points_;
   std::vector<STPoint> lower_points_;
 
+  // Note: 障碍物的ID
   std::string id_;
   double characteristic_length_ = 1.0;
+  // Note: ST boundary里面的点的最小的s
   double min_s_ = std::numeric_limits<double>::max();
+  // Note: ST boundary里面的点的最大的s
   double max_s_ = std::numeric_limits<double>::lowest();
+  // Note: ST boundary里面的点的最小的t(lower points第一个点的t)
   double min_t_ = std::numeric_limits<double>::max();
+  // Note: ST boundary里面的点的最大的t(lower points最后一个点的t)
   double max_t_ = std::numeric_limits<double>::lowest();
 
   STPoint bottom_left_point_;
@@ -180,6 +185,8 @@ class STBoundary : public common::math::Polygon2d {
   STPoint upper_left_point_;
   STPoint upper_right_point_;
 
+  // Note: 障碍物在自车path低路权段最晚的relative time(基于障碍物轨迹的timestamp)
+  // Note: 如果障碍物不在自车低路权路段，那么这个保持默认值(0)
   double obstacle_road_right_ending_t_;
 };
 

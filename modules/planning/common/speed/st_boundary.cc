@@ -30,9 +30,11 @@ namespace planning {
 using apollo::common::math::LineSegment2d;
 using apollo::common::math::Vec2d;
 
+// Note: STBoundary继承自Polygon2d
 STBoundary::STBoundary(
     const std::vector<std::pair<STPoint, STPoint>>& point_pairs,
     bool is_accurate_boundary) {
+  // Note: 做一些基本检查，例如同一个t的lower s肯定要比upper s要小之类的检查
   CHECK(IsValid(point_pairs)) << "The input point_pairs are NOT valid";
 
   std::vector<std::pair<STPoint, STPoint>> reduced_pairs(point_pairs);
@@ -47,6 +49,7 @@ STBoundary::STBoundary(
     upper_points_.emplace_back(item.second.s(), t);
   }
 
+  // Note: 把ST boundary的下界点和上届点连接成polygon
   for (const auto& point : lower_points_) {
     points_.emplace_back(point.t(), point.s());
   }
@@ -54,6 +57,8 @@ STBoundary::STBoundary(
     points_.emplace_back(rit->t(), rit->s());
   }
 
+  // Note: 建polygon
+  // Note: STBoundary继承自Polygon2d
   BuildFromPoints();
 
   for (const auto& point : lower_points_) {
@@ -97,6 +102,8 @@ STBoundary STBoundary::CreateInstanceAccurate(
         STPoint(lower_points.at(i).s(), lower_points.at(i).t()),
         STPoint(upper_points.at(i).s(), upper_points.at(i).t()));
   }
+  // Note: 建立一个由lower_points和upper_points围成的polygon
+  // Note: 传入true，则不对polygon做任何优化，表示精确的polygon(is_accurate_boundary)
   return STBoundary(point_pairs, true);
 }
 
@@ -168,6 +175,7 @@ bool STBoundary::GetUnblockSRange(const double curr_time, double* s_upper,
   return true;
 }
 
+// Note: 计算对应时间的STBoundary的上下界
 bool STBoundary::GetBoundarySRange(const double curr_time, double* s_upper,
                                    double* s_lower) const {
   CHECK_NOTNULL(s_upper);

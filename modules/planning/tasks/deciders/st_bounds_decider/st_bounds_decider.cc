@@ -79,6 +79,7 @@ Status STBoundsDecider::Process(Frame* const frame,
   return Status::OK();
 }
 
+// Note: 初始化一些东西，构建st图
 void STBoundsDecider::InitSTBoundsDecider(
     const Frame& frame, ReferenceLineInfo* const reference_line_info) {
   const PathData& path_data = reference_line_info->path_data();
@@ -89,6 +90,7 @@ void STBoundsDecider::InitSTBoundsDecider(
   st_obstacles_processor_.Init(path_data.discretized_path().Length(),
                                st_bounds_config_.total_time(), path_data,
                                path_decision);
+  // Note: 计算障碍物的ST boundary
   st_obstacles_processor_.MapObstaclesToSTBoundaries(path_decision);
   auto time2 = std::chrono::system_clock::now();
   std::chrono::duration<double> diff = time2 - time1;
@@ -124,6 +126,7 @@ Status STBoundsDecider::GenerateFallbackSTBound(STBound* const st_bound,
     ADEBUG << "Processing st-boundary at t = " << t;
 
     // Get Boundary due to driving limits
+    // Note: t时刻车辆动力学范围内的s边界
     auto driving_limits_bound = st_driving_limits_.GetVehicleDynamicsLimits(t);
     s_lower = std::fmax(s_lower, driving_limits_bound.first);
     s_upper = std::fmin(s_upper, driving_limits_bound.second);
@@ -211,6 +214,7 @@ Status STBoundsDecider::GenerateFallbackSTBound(STBound* const st_bound,
 Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
                                                STBound* const vt_bound) {
   // Initialize st-boundary.
+  // Note: 初始化st和vt bound，采样间隔为0.1秒，与Prediction给的预测线的t采样间隔相同
   for (double curr_t = 0.0; curr_t <= st_bounds_config_.total_time();
        curr_t += kSTBoundsDeciderResolution) {
     st_bound->emplace_back(curr_t, std::numeric_limits<double>::lowest(),
@@ -307,6 +311,7 @@ Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
   return Status::OK();
 }
 
+// Note: 剔除available_choices中超出车辆动力学限制的STBound
 void STBoundsDecider::RemoveInvalidDecisions(
     std::pair<double, double> driving_limit,
     std::vector<std::pair<STBoundPoint, ObsDecSet>>* available_choices) {

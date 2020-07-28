@@ -23,6 +23,7 @@
 namespace apollo {
 namespace planning {
 
+// Note: 设定adc起始状态，t0 = 0, s0 = 0, v0 = 规划起始点速度
 void STDrivingLimits::Init(const double max_acc, const double max_dec,
                            const double max_v, double curr_v) {
   max_acc_ = max_acc;
@@ -36,10 +37,12 @@ void STDrivingLimits::Init(const double max_acc, const double max_dec,
   lower_s0_ = 0.0;
 }
 
+// Note: 以最大加速度/减速度行驶，t时刻车的位置边界
 std::pair<double, double> STDrivingLimits::GetVehicleDynamicsLimits(
     const double t) const {
   std::pair<double, double> dynamic_limits;
   // Process lower bound: (constant deceleration)
+  // Note: 计算以最大减速度减速的话，adc在t时刻的位置
   double dec_time = lower_v0_ / max_dec_;
   if (t - lower_t0_ < dec_time) {
     dynamic_limits.first =
@@ -50,6 +53,7 @@ std::pair<double, double> STDrivingLimits::GetVehicleDynamicsLimits(
   }
 
   // Process upper bound: (constant acceleration)
+  // Note: 计算以最大加速度加速的话，adc在t时刻的位置
   double acc_time = (max_v_ - upper_v0_) / max_acc_;
   if (t - upper_t0_ < acc_time) {
     dynamic_limits.second =
