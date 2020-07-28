@@ -237,6 +237,8 @@ std::vector<TrajectoryPoint> TrajectoryStitcher::ComputeStitchingTrajectory(
     }
     tp.set_relative_time(tp.relative_time() + prev_trajectory->header_time() -
                          current_timestamp);
+    // Note: 最后一个stitching point的s是0
+    // 即规划起始点的s值就设为0
     tp.mutable_path_point()->set_s(tp.path_point().s() - zero_s);
   }
   return stitching_trajectory;

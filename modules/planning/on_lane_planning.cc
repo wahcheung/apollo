@@ -202,6 +202,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
                              ADCTrajectory* const ptr_trajectory_pb) {
   local_view_ = local_view;
   // Note: ptr_trajectory_pb中header的时间戳
+  // RunOnce起始时间
   const double start_timestamp = Clock::NowInSeconds();
   const double start_system_timestamp =
       std::chrono::duration<double>(
@@ -269,6 +270,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   const double planning_cycle_time =
       1.0 / static_cast<double>(FLAGS_planning_loop_rate);
 
+  // Note: 保留上一帧的部分轨迹，可以避免控制参考点跳变
   std::string replan_reason;
   std::vector<TrajectoryPoint> stitching_trajectory =
       TrajectoryStitcher::ComputeStitchingTrajectory(
@@ -290,7 +292,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   if (FLAGS_enable_record_debug) {
     frame_->RecordInputDebug(ptr_trajectory_pb->mutable_debug());
   }
-  // 记录Frame初始化耗时
+  // Note: 记录Frame初始化耗时
   ptr_trajectory_pb->mutable_latency_stats()->set_init_frame_time_ms(
       Clock::NowInSeconds() - start_timestamp);
   // Note: Frame初始化失败，触发紧急停车

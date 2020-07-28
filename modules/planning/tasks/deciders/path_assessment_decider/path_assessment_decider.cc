@@ -364,6 +364,8 @@ bool PathAssessmentDecider::IsValidRegularPath(
     return false;
   }
   // Check if there is any collision.
+  // Note: 由于在PathBoundsDecider中对所有的RegularPathBound延长了kNumExtraTailBoundPoint个点
+  // 延长的时候是无视障碍物的，因此，如果延长区间里面有静态障碍物，则会导致Path是CollidingWithStaticObstacles的
   if (IsCollidingWithStaticObstacles(reference_line_info, path_data)) {
     ADEBUG << path_data.path_label() << ": ADC has collision.";
     return false;
