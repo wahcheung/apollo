@@ -109,6 +109,7 @@ Status PathReuseDecider::Process(Frame* const frame,
   //                                          .front()
   //                                          .trajectory_type();
   if (path_reusable_) {
+    // Note: 当前帧不需要replan && 上一帧速度规划成功 && 上一帧的path不与当前帧的静态障碍物碰撞
     if (!frame->current_frame_planned_trajectory().is_replan() &&
         speed_optimization_successful && IsCollisionFree(reference_line_info) &&
         TrimHistoryPath(frame, reference_line_info)) {
@@ -164,6 +165,7 @@ bool PathReuseDecider::IsIgnoredBlockingObstacle(
   double final_s_buffer = std::max(kSDistBuffer, kTimeBuffer * adc_speed);
   // current vehicle s position
   common::SLPoint adc_position_sl;
+  // Note: ego sl
   GetADCSLPoint(reference_line, &adc_position_sl);
   // blocking obstacle start s
   double blocking_obstacle_start_s;
@@ -178,6 +180,7 @@ bool PathReuseDecider::IsIgnoredBlockingObstacle(
   }
 }
 
+// Note: blocking obstacle的start_s
 bool PathReuseDecider::GetBlockingObstacleS(
     ReferenceLineInfo* const reference_line_info, double* blocking_obstacle_s) {
   auto* mutable_path_decider_status = PlanningContext::Instance()
@@ -224,6 +227,7 @@ bool PathReuseDecider::IsCollisionFree(
   for (auto obstacle :
        reference_line_info->path_decision()->obstacles().Items()) {
     // filtered all non-static objects and virtual obstacle
+    // Note: 过滤动态障碍物和虚拟障碍物
     if (!obstacle->IsStatic() || obstacle->IsVirtual()) {
       if (!obstacle->IsStatic()) {
         ADEBUG << "SPOT a dynamic obstacle";
@@ -320,6 +324,7 @@ bool PathReuseDecider::NotShortPath(const DiscretizedPath& current_path) {
   return current_path.size() >= kShortPathThreshold;
 }
 
+// Note: 参数frame和reference_line_info都是当前帧的
 bool PathReuseDecider::TrimHistoryPath(
     Frame* frame, ReferenceLineInfo* const reference_line_info) {
   const ReferenceLine& reference_line = reference_line_info->reference_line();
@@ -338,8 +343,10 @@ bool PathReuseDecider::TrimHistoryPath(
          << history_init_path_point.y() << "], s: ["
          << history_init_path_point.s() << "]";
 
+  // Note: 当前帧规划起始点
   const common::TrajectoryPoint planning_start_point =
       frame->PlanningStartPoint();
+  // Note: 当前帧规划起始点path_point
   common::PathPoint init_path_point = planning_start_point.path_point();
   ADEBUG << "init_path_point x:[" << std::setprecision(9) << init_path_point.x()
          << "], y[" << init_path_point.y() << "], s: [" << init_path_point.s()
@@ -348,10 +355,12 @@ bool PathReuseDecider::TrimHistoryPath(
   const DiscretizedPath& history_path =
       history_frame->current_frame_planned_path();
   DiscretizedPath trimmed_path;
+  // Note: 自车SL信息
   common::SLPoint adc_position_sl;  // current vehicle sl position
   GetADCSLPoint(reference_line, &adc_position_sl);
   ADEBUG << "adc_position_sl.s(): " << adc_position_sl.s();
 
+  // Note: 上一轮规划的path的起始点的下一个点
   size_t path_start_index = 0;
 
   for (size_t i = 0; i < history_path.size(); ++i) {
@@ -364,17 +373,21 @@ bool PathReuseDecider::TrimHistoryPath(
   ADEBUG << "!!!path_start_index[" << path_start_index << "]";
 
   // get current s=0
+  // Note: 当前帧规划起始点sl
   common::SLPoint init_path_position_sl;
   reference_line.XYToSL(init_path_point, &init_path_position_sl);
   bool inserted_init_point = false;
 
   for (size_t i = path_start_index; i < history_path.size(); ++i) {
+    // Note: 历史帧的path_point在当前帧的参考线的sl
     common::SLPoint path_position_sl;
+    // Note: 历史帧的path_point
     common::math::Vec2d path_position = {history_path[i].x(),
                                          history_path[i].y()};
 
     reference_line.XYToSL(path_position, &path_position_sl);
 
+    // Note: 重刷path point的s值
     double updated_s = path_position_sl.s() - init_path_position_sl.s();
     // insert init point
     if (updated_s > 0 && !inserted_init_point) {
