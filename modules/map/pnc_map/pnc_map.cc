@@ -370,7 +370,7 @@ int PncMap::GetWaypointIndex(const LaneWaypoint &waypoint) const {
   // Note: 从adc_route_index_开始往前查找，看看waypoint在哪段路由中
   int forward_index = SearchForwardWaypointIndex(adc_route_index_, waypoint);
   // Note: 往前没搜到就倒着搜，直接返回倒着搜的结果
-  // Note: 倒车才会导致向前找没找到
+  // Note: 人工接管的情况下往回开或者倒车才会导致向前找没找到
   if (forward_index >= static_cast<int>(route_indices_.size())) {
     return SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   }
@@ -380,8 +380,8 @@ int PncMap::GetWaypointIndex(const LaneWaypoint &waypoint) const {
     return forward_index;
   }
   // Note: 现在往前已经找到一个自车路由索引，但位置不符合要求(forward_index > adc_route_index_ + 1)
-  // Note: 什么情况下倒着搜也能搜到？全局路由包含cycle？
-  // Note: 为什么要添加下面这些逻辑是为了处理什么情况而准备的？
+  // Note: 考虑到在全局routing包含cycle的情况下，人工接管往回开或者倒车，
+  //       会到达上一个路段，如果routing需要两次经过这个路段，则将自车路由段回退
   auto backward_index = SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   if (backward_index < 0) {
     return forward_index;
@@ -514,6 +514,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
   for (const int index : drive_passages) {
     const auto &passage = road.passage(index);
     RouteSegments segments;
+    // Note: 获取passage中的LaneSegments
     if (!PassageToSegments(passage, &segments)) {
       ADEBUG << "Failed to convert passage to lane segments.";
       continue;
