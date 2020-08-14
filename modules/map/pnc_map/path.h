@@ -367,13 +367,18 @@ class Path {
   // 将平滑的曲线上的点重新赋值给path_points_，然后重新执行初始化流程Init()
   std::vector<MapPathPoint> path_points_;
   // Note: 形成Path的LaneSegment列表
+  // Note: 先将path_points_分割成小LaneSegment，然后对于同属一条Lane的相邻LaneSegments合并
+  //       最后得到的是形成Path的前后相连的大段LaneSegment
+  // Note: 注意，lane_segments_与segments_不一样
   std::vector<LaneSegment> lane_segments_;
-  // Note: lane_segments_中每个LaneSegment(Lane)末点的累计距离累加
+  // Note: lane_segments_[i]末点的累计距离累加
   std::vector<double> lane_accumulated_s_;
   // Note: 采样点path_points_形成的LaneSegment
   // 这个与segments_很像，但注意两者存的信息不一样的
   // Note: 第i个元素表示path_points_[i] --> path_points_[i + 1]
   std::vector<LaneSegment> lane_segments_to_next_point_;
+  // Note: size = num_points_，每个点都带方向，最后一个点的方向与倒数第二个点的一样
+  // path_points_[i] --> path_points_[i + 1]的朝向
   std::vector<common::math::Vec2d> unit_directions_;
   // Note: 中心线长度，等于最后一个样本点的累计距离
   double length_ = 0.0;

@@ -243,6 +243,7 @@ std::vector<MapPathPoint> MapPathPoint::GetPointsFromLane(LaneInfoConstPtr lane,
 // Note: 去重，被排除的点的LaneWaypoint会被放到幸存点的LaneWaypoint列表中
 // 由于这里去重并没有把所有的信息都删除，还保留了LaneWaypoint信息(在幸存点中)
 // 从一个点的LaneWaypoints可以知道这个点记录的是哪些Lane上的点及其位置信息(s)
+// Note: 两个相连的LaneSegment的连接处的点被重复添加了，去重但保留LaneWaypoint信息
 void MapPathPoint::RemoveDuplicates(std::vector<MapPathPoint>* points) {
   static constexpr double kDuplicatedPointsEpsilon = 1e-7;
   static constexpr double limit =
@@ -424,6 +425,8 @@ void Path::InitPoints() {
   CHECK_EQ(segments_.size(), num_segments_);
 }
 
+// Note: 先将path_points_分割成小LaneSegment，然后对于同属一条Lane的相邻LaneSegments合并
+// 最后得到的是形成Path的前后相连的大段LaneSegment
 void Path::InitLaneSegments() {
   if (lane_segments_.empty()) {
     for (int i = 0; i + 1 < num_points_; ++i) {
@@ -462,6 +465,8 @@ void Path::InitLaneSegments() {
 }
 
 // Note: 计算均匀采样点处的路面(Lane/Road)左右宽度
+// Note: 这个宽度是相对于参考线而言的，在平滑前，原始参考线就是道路中心线，这时候的宽度直接从地图取
+// 参考线平滑之后，平滑点相对与原始参考线的lateral偏移有了，根据偏移量和原始的Lane宽度计算左右宽度
 void Path::InitWidth() {
   lane_left_width_.clear();
   lane_left_width_.reserve(num_sample_points_);
@@ -492,6 +497,7 @@ void Path::InitWidth() {
       double lane_right_width = 0.0;
       waypoint.lane->GetWidth(waypoint.s, &lane_left_width, &lane_right_width);
       // Note: waypoint.l指的是这个点相对于Lane中心线的横向距离(在中心线左边为正，右边为负)
+      // Note: 在做参考线平滑前，这个waypoint.l的值一直都是0
       // Note: 下面的计算表明，lane_left_width_的意思是参考线上的点到Lane左右边界的距离
       // Note: 在做参考线平滑的时候对点做了范围控制，waypoint.l值应该不会超出Lane的边界
       lane_left_width_.push_back(lane_left_width - waypoint.l);

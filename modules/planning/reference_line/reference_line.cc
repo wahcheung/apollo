@@ -180,6 +180,7 @@ bool ReferenceLine::Segment(const double s, const double look_backward,
       std::vector<ReferencePoint>(reference_points_.begin() + start_index,
                                   reference_points_.begin() + end_index);
 
+  // Note: 根据剩余的参考点重建MathPath
   map_path_ = MapPath(std::vector<hdmap::MapPathPoint>(
       reference_points_.begin(), reference_points_.end()));
   return true;

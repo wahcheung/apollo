@@ -76,6 +76,7 @@ OnLanePlanning::~OnLanePlanning() {
 std::string OnLanePlanning::Name() const { return "on_lane_planning"; }
 
 // Note: 只在PlanningComponent初始化时执行一次
+// Note: config来自planning_config.pb.txt
 Status OnLanePlanning::Init(const PlanningConfig& config) {
   config_ = config;
   if (!CheckPlanningConfig(config_)) {

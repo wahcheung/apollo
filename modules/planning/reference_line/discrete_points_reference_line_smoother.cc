@@ -224,6 +224,7 @@ void DiscretePointsReferenceLineSmoother::DeNormalizePoints(
 }
 
 // Note: 把点的heading/kappa/dkappa/lane_waypoints信息加上
+// 计算smoothed的reference_point的l值(相对于raw_ref_line而言)
 bool DiscretePointsReferenceLineSmoother::GenerateRefPointProfile(
     const ReferenceLine& raw_reference_line,
     const std::vector<std::pair<double, double>>& xy_points,

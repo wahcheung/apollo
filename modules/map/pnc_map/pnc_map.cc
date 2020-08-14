@@ -370,7 +370,7 @@ int PncMap::GetWaypointIndex(const LaneWaypoint &waypoint) const {
   // Note: 从adc_route_index_开始往前查找，看看waypoint在哪段路由中
   int forward_index = SearchForwardWaypointIndex(adc_route_index_, waypoint);
   // Note: 往前没搜到就倒着搜，直接返回倒着搜的结果
-  // Note: 人工接管的情况下往回开或者倒车才会导致向前找没找到
+  // Note: 倒车才会导致向前找没找到
   if (forward_index >= static_cast<int>(route_indices_.size())) {
     return SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   }
@@ -380,8 +380,8 @@ int PncMap::GetWaypointIndex(const LaneWaypoint &waypoint) const {
     return forward_index;
   }
   // Note: 现在往前已经找到一个自车路由索引，但位置不符合要求(forward_index > adc_route_index_ + 1)
-  // Note: 考虑到在全局routing包含cycle的情况下，人工接管往回开或者倒车，
-  //       会到达上一个路段，如果routing需要两次经过这个路段，则将自车路由段回退
+  // Note: 什么情况下倒着搜也能搜到？全局路由包含cycle？
+  // Note: 为什么要添加下面这些逻辑是为了处理什么情况而准备的？
   auto backward_index = SearchBackwardWaypointIndex(adc_route_index_, waypoint);
   if (backward_index < 0) {
     return forward_index;
@@ -536,6 +536,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
     }
     if (index != passage_index) {
       // Note: 检查segments是不是真的是adc_waypoint_的邻近passage
+      // Note: 检查邻近passage与adc_waypoint_所在Lane的距离，检查朝向是否一致(< 90°)
       if (!segments.CanDriveFrom(adc_waypoint_)) {
         ADEBUG << "You cannot drive from current waypoint to passage: "
                << index;
@@ -544,6 +545,7 @@ bool PncMap::GetRouteSegments(const VehicleState &vehicle_state,
     }
     route_segments->emplace_back();
     // Note: segments末点
+    // Note: LaneWaypoint(back().lane, back().end_s, 0.0)
     const auto last_waypoint = segments.LastWaypoint();
     // Note: 以自车位置为基准，对segments前后进行延长，延长至指定长度
     if (!ExtendSegments(segments, sl.s() - backward_length,
@@ -730,6 +732,7 @@ bool PncMap::ExtendSegments(const RouteSegments &segments, double start_s,
   if (start_s < 0) {
     const auto &first_segment = *segments.begin();
     auto lane = first_segment.lane;
+    // Note: 当前Lane还剩下的没截取的长度
     double s = first_segment.start_s;
     // Note: 需要从segments的起点向车尾方向扩展的长度
     double extend_s = -start_s;
@@ -737,6 +740,8 @@ bool PncMap::ExtendSegments(const RouteSegments &segments, double start_s,
     while (extend_s > kRouteEpsilon) {
       // Note: 当前Lane取完了,去predecessor lane
       if (s <= kRouteEpsilon) {
+        // Note: 在routing结果中查找当前Lane的predecessor lane
+        // Note: 如果在routing结果中没找到predecessor_id里面的ID，则返回predecessor_id(0)
         lane = GetRoutePredecessor(lane);
         if (lane == nullptr ||
             unique_lanes.find(lane->id().id()) != unique_lanes.end()) {
