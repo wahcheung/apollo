@@ -26,9 +26,11 @@ namespace planning {
 void STGuideLine::Init(double desired_v) {
   s0_ = 0.0;
   t0_ = 0.0;
+  // Note: 这个固定为15.0
   v0_ = desired_v;
 }
 
+// Note: 匀速行驶的guide line
 double STGuideLine::GetGuideSFromT(double t) const {
   return s0_ + (t - t0_) * v0_;
 }

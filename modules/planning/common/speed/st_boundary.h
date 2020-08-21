@@ -186,6 +186,8 @@ class STBoundary : public common::math::Polygon2d {
   STPoint upper_right_point_;
 
   // Note: 障碍物在自车path低路权段最晚的relative time(基于障碍物轨迹的timestamp)
+  // Note: 静态障碍物如果与ADC的path有overlap，则这个时间为planning_time_(7s)
+  // Note: 这个时间内，障碍物拥有更高的路权
   // Note: 如果障碍物不在自车低路权路段，那么这个保持默认值(0)
   double obstacle_road_right_ending_t_;
 };

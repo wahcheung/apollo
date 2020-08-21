@@ -175,21 +175,26 @@ bool STBoundary::GetUnblockSRange(const double curr_time, double* s_upper,
   return true;
 }
 
-// Note: 计算对应时间的STBoundary的上下界
+// Note: 计算对应时间curr_time的障碍物STBoundary的s上下边界值
 bool STBoundary::GetBoundarySRange(const double curr_time, double* s_upper,
                                    double* s_lower) const {
   CHECK_NOTNULL(s_upper);
   CHECK_NOTNULL(s_lower);
+  // Note: curr_time不在STBoundary的时间区间内，不影响curr_time的s范围
   if (curr_time < min_t_ || curr_time > max_t_) {
     return false;
   }
 
   size_t left = 0;
   size_t right = 0;
+  // Note: 如果curr_time等于min_t_，则返回的left=right=0
+  //       如果curr_time等于max_t_，则返回的left=right=size-1
+  //       否则返回left=(curr_time第一个t大于等于curr_time的boundary point的index)-1, right=left+1
   if (!GetIndexRange(lower_points_, curr_time, &left, &right)) {
     AERROR << "Fail to get index range.";
     return false;
   }
+  // Note: ratio，用于插值计算
   const double r =
       (left == right
            ? 0.0

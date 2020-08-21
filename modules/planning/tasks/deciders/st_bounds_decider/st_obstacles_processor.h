@@ -195,22 +195,25 @@ class STObstaclesProcessor {
 
  private:
   double planning_time_;
+  // Note: 来自path_data.discretized_path().Length()
   double planning_distance_;
   PathData path_data_;
   common::VehicleParam vehicle_param_;
+  // Note: 来自path_data_.discretized_path().front().s()
   double adc_path_init_s_;
   PathDecision* path_decision_;
 
   // A vector of sorted obstacle's t-edges:
   //  (is_starting_t, t, s_min, s_max, obs_id).
   // Note: ST图中障碍物boundary的左右两条平行的边，即对应min_t和max_t的edge
-  // Note: 已经按照start_t从小到大排序
+  // Note: 已经按照start_t从小到大排序（如果start_t相同，则is_starting_t为true的在前）
   std::vector<std::tuple<int, double, double, double, std::string>>
       obs_t_edges_;
   int obs_t_edges_idx_;
 
   std::unordered_map<std::string, STBoundary> obs_id_to_st_boundary_;
-  // Note: 对障碍物的decision
+  // Note: 对障碍物的decision，当扫面线越过（到达）obstacle st右边界时，
+  // 会erase该obstacle的decision
   std::unordered_map<std::string, ObjectDecisionType> obs_id_to_decision_;
 
   std::vector<std::tuple<std::string, STBoundary, Obstacle*>>
@@ -222,6 +225,7 @@ class STObstaclesProcessor {
   std::unordered_map<std::string, STBoundary>
       obs_id_to_alternative_st_boundary_;
 
+  // Note: ADC的低路权路段
   // Note: 记录ADC Path哪些segment是OUT_ON_FORWARD_LANE/OUT_ON_REVERSE_LANE的
   std::vector<std::pair<double, double>> adc_low_road_right_segments_;
 
