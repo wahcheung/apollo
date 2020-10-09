@@ -103,11 +103,13 @@ Status GriddedPathTimeGraph::Search(SpeedData* const speed_data) {
     if (boundary->IsPointInBoundary({0.0, 0.0}) ||
         (std::fabs(boundary->min_t()) < kBounadryEpsilon &&
          std::fabs(boundary->min_s()) < kBounadryEpsilon)) {
+      // Note: dimension_t_ = 7.0 / 0.1 + 1 = 71
       dimension_t_ = static_cast<uint32_t>(std::ceil(
                          total_length_t_ / static_cast<double>(unit_t_))) +
                      1;
       std::vector<SpeedPoint> speed_profile;
       double t = 0.0;
+      // Note: 这里的速度为0的点太多了，一个点足够
       for (uint32_t i = 0; i < dimension_t_; ++i, t += unit_t_) {
         speed_profile.push_back(PointFactory::ToSpeedPoint(0, t));
       }
@@ -160,22 +162,28 @@ Status GriddedPathTimeGraph::InitCostTable() {
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
+  // Note: t维度是固定间隔采样的
   dimension_t_ = static_cast<uint32_t>(std::ceil(
                      total_length_t_ / static_cast<double>(unit_t_))) +
                  1;
 
+  // Note: 近处的点需要密一些，远处的点可以稀疏一些，从而节省最终轨迹需要的存储空间
+  // Note: 稠密点的长度定为前面10米，剩下的稀疏
   double sparse_length_s =
       total_length_s_ -
       static_cast<double>(dense_dimension_s_ - 1) * dense_unit_s_;
+  // Note: 稀疏点的数量
   sparse_dimension_s_ =
       sparse_length_s > std::numeric_limits<double>::epsilon()
           ? static_cast<uint32_t>(std::ceil(sparse_length_s / sparse_unit_s_))
           : 0;
+  // Note: 如果path长度很短，则按照0.1米的s间隔采样
   dense_dimension_s_ =
       sparse_length_s > std::numeric_limits<double>::epsilon()
           ? dense_dimension_s_
           : static_cast<uint32_t>(std::ceil(total_length_s_ / dense_unit_s_)) +
                 1;
+  // Note: 总的s采样点数量
   dimension_s_ = dense_dimension_s_ + sparse_dimension_s_;
 
   // Sanity Check

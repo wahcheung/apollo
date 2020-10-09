@@ -55,14 +55,17 @@ Status SpeedBoundsDecider::Process(
 
   // 1. Map obstacles into st graph
   auto time1 = std::chrono::system_clock::now();
+  // STBoundaryMapper初始化就只是简单地给那些私有变量赋值
   STBoundaryMapper boundary_mapper(
       speed_bounds_config_, reference_line, path_data,
       path_data.discretized_path().Length(), speed_bounds_config_.total_time());
 
   if (!FLAGS_use_st_drivable_boundary) {
+    // Note: 不使用ST_BOUNDS_DECIDER的数据，清空
     path_decision->EraseStBoundaries();
   }
 
+  // Note: 在函数里面，又计算了STBoundary，并且obstacle->set_path_st_boundary(boundary);
   if (boundary_mapper.ComputeSTBoundary(path_decision).code() ==
       ErrorCode::PLANNING_ERROR) {
     const std::string msg = "Mapping obstacle failed.";
@@ -145,6 +148,7 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
     const auto right_bottom_point_s = st_boundary.bottom_right_point().s();
     const auto lowest_s = std::min(left_bottom_point_s, right_bottom_point_s);
 
+    // Note: 这个障碍物应该是逆向行驶的才会有left_bottom_point_s - right_bottom_point_s
     if (left_bottom_point_s - right_bottom_point_s > kEpsilon) {
       if (min_s_reverse > lowest_s) {
         min_s_reverse = lowest_s;
@@ -157,6 +161,7 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
   min_s_reverse = std::max(min_s_reverse, 0.0);
   min_s_non_reverse = std::max(min_s_non_reverse, 0.0);
 
+  // Note: 如果min_s_non_reverse较大直接就给0.0了，是不是会导致急刹
   return min_s_non_reverse > min_s_reverse ? 0.0 : min_s_non_reverse;
 }
 

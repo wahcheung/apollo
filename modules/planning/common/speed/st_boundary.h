@@ -170,6 +170,7 @@ class STBoundary : public common::math::Polygon2d {
 
   // Note: 障碍物的ID
   std::string id_;
+  // Note: 对s上界和下届扩展的长度
   double characteristic_length_ = 1.0;
   // Note: ST boundary里面的点的最小的s
   double min_s_ = std::numeric_limits<double>::max();

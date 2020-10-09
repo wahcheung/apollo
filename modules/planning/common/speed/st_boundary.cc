@@ -470,6 +470,7 @@ void STBoundary::RemoveRedundantPoints(
                             point_pairs->at(j + 1).first);
     LineSegment2d upper_seg(point_pairs->at(i).second,
                             point_pairs->at(j + 1).second);
+    // Note: 判断中间点j是不是在两个端点(i和j+1)的连线附近
     if (!IsPointNear(lower_seg, point_pairs->at(j).first, kMaxDist) ||
         !IsPointNear(upper_seg, point_pairs->at(j).second, kMaxDist)) {
       ++i;

@@ -105,10 +105,12 @@ class GriddedPathTimeGraph {
   // cost utility with configuration;
   DpStCost dp_st_cost_;
 
+  // Note: 就是speed_bounds_config中的total_time
   double total_length_t_ = 0.0;
   double unit_t_ = 0.0;
   uint32_t dimension_t_ = 0;
 
+  // Note: 即path_length
   double total_length_s_ = 0.0;
   double dense_unit_s_ = 0.0;
   double sparse_unit_s_ = 0.0;

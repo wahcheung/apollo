@@ -44,6 +44,8 @@ SpeedLimitDecider::SpeedLimitDecider(const SpeedBoundsDeciderConfig& config,
       vehicle_param_(common::VehicleConfigHelper::GetConfig().vehicle_param()) {
 }
 
+// Note: 根据地图限速/向心加速度限制/Nudge决策导致的减速/预设的lowest_speed
+// 来确定path各处的速度限制
 Status SpeedLimitDecider::GetSpeedLimits(
     const IndexedList<std::string, Obstacle>& obstacles,
     SpeedLimit* const speed_limit_data) const {
@@ -54,6 +56,7 @@ Status SpeedLimitDecider::GetSpeedLimits(
 
   for (uint32_t i = 0; i < discretized_path.size(); ++i) {
     const double path_s = discretized_path.at(i).s();
+    // Note: path_point在参考线的投影s
     const double reference_line_s = frenet_path.at(i).s();
     if (reference_line_s > reference_line_.Length()) {
       AWARN << "path w.r.t. reference line at [" << reference_line_s
@@ -106,6 +109,7 @@ Status SpeedLimitDecider::GetSpeedLimits(
       const double obstacle_back_s =
           ptr_obstacle->PerceptionSLBoundary().start_s();
 
+      // Note: 自车与障碍物在参考线方向上不重合
       if (vehicle_front_s < obstacle_back_s ||
           vehicle_back_s > obstacle_front_s) {
         continue;
