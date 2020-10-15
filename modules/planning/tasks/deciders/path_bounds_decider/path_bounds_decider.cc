@@ -690,12 +690,14 @@ bool PathBoundsDecider::SearchPullOverPosition(
   int idx = 0;
   if (search_backward) {
     // 1. Locate the first point before destination.
+    // Note: 终点靠边停车，从终点处开始倒退着搜索停车位，现在先找到终点前的第一个点
     idx = static_cast<int>(path_bound.size()) - 1;
     while (idx >= 0 && std::get<0>(path_bound[idx]) > pull_over_s) {
       --idx;
     }
   } else {
     // 1. Locate the first point after emergency_pull_over s.
+    // Note: 紧急靠边停车，从自车位置就近找停车位，现在先找到符合转弯半径的最近位置的点
     while (idx < static_cast<int>(path_bound.size()) &&
            std::get<0>(path_bound[idx]) < pull_over_s) {
       ++idx;
@@ -707,10 +709,12 @@ bool PathBoundsDecider::SearchPullOverPosition(
   }
 
   // Search for a feasible location for pull-over.
+  // Note: 这个停车位把之前画boundary时obstacle的前后buffer减去了
   const double pull_over_space_length =
       kPulloverLonSearchCoeff *
           VehicleConfigHelper::GetConfig().vehicle_param().length() -
       FLAGS_obstacle_lon_start_buffer - FLAGS_obstacle_lon_end_buffer;
+  // Note: 车宽度buffer
   const double pull_over_space_width =
       (kPulloverLatSearchCoeff - 1.0) *
       VehicleConfigHelper::GetConfig().vehicle_param().width();
@@ -765,12 +769,14 @@ bool PathBoundsDecider::SearchPullOverPosition(
       ADEBUG << "At s = " << curr_s
              << ", the road left width = " << curr_road_left_width
              << ", and the road right width = " << curr_road_right_width;
+      // Note: 右边的可通行空间不靠近路沿(标识右边有障碍物)，不在此处靠边
       if (curr_road_right_width - (curr_right_bound + adc_half_width) >
           config_.path_bounds_decider_config().pull_over_road_edge_buffer()) {
         AERROR << "Not close enough to road-edge. Not feasible for pull-over.";
         is_feasible_window = false;
         break;
       }
+      // Note: 宽度余量不够
       if (std::get<2>(path_bound[j]) - std::get<1>(path_bound[j]) <
           pull_over_space_width) {
         AERROR << "Not wide enough to fit ADC. Not feasible for pull-over.";
@@ -788,6 +794,7 @@ bool PathBoundsDecider::SearchPullOverPosition(
       const auto& reference_line = reference_line_info.reference_line();
       // estimate pull over point to have the vehicle keep same safety distance
       // to front and back
+      // Note: 现在我们已经找到一个符合要求的停车区间[idx, j]或者[j, idx]，我们想要把车停到这个区间的正中间
       const auto& vehicle_param =
           VehicleConfigHelper::GetConfig().vehicle_param();
       const double back_clear_to_total_length_ratio =
@@ -801,6 +808,7 @@ bool PathBoundsDecider::SearchPullOverPosition(
         start_idx = idx;
         end_idx = j;
       }
+      // Note: 计算车后轴中心所在的位置下标
       auto pull_over_idx = static_cast<size_t>(
           back_clear_to_total_length_ratio * static_cast<double>(end_idx) +
           (1.0 - back_clear_to_total_length_ratio) *
@@ -808,6 +816,7 @@ bool PathBoundsDecider::SearchPullOverPosition(
 
       const auto& pull_over_point = path_bound[pull_over_idx];
       const double pull_over_s = std::get<0>(pull_over_point);
+      // Note: 停车的横向位置距离右边界pull_over_space_width / 2.0
       const double pull_over_l =
           std::get<1>(pull_over_point) + pull_over_space_width / 2.0;
       common::SLPoint pull_over_sl_point;
