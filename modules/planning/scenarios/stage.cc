@@ -87,6 +87,7 @@ bool Stage::ExecuteTaskOnReferenceLine(
   for (auto& reference_line_info : *frame->mutable_reference_line_info()) {
     if (!reference_line_info.IsDrivable()) {
       AERROR << "The generated path is not drivable";
+      // Note: 一条参考线不符合就整个函数返回了
       return false;
     }
 

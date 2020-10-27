@@ -204,6 +204,9 @@ class RouteSegments : public std::vector<LaneSegment> {
   static double Length(const RouteSegments &segments);
 
  private:
+  // Note: routing给来的passage的最后一个点，
+  // 即使route_segments被延长了，那么还是将原来的这个route_end_waypoint设置为延长后的route_segments的route_end_waypoint
+  // 如果route_segments被缩短了，那么缩短后的route_segments的这个字段值是未经赋值的
   LaneWaypoint route_end_waypoint_;
 
   /**

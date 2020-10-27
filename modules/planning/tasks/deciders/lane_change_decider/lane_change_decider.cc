@@ -51,7 +51,13 @@ Status LaneChangeDecider::Process(
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
+  // Note: 关于lane_change_status，planning_status.proto中有详细的注释
+
   // Note: 优先变道
+  // Note: 这个处理逻辑比较怪的，这里即使reckless_change_lane
+  // 但却没有设置is_clear_to_change_lane，
+  // 在path_bound_decider中就会设置lane_change_start_position，导致adc还是会先走几十米再变道
+  // 但也不能说是毫无用处，这个先走几十米可以打足够时间的转向灯
   if (lane_change_decider_config.reckless_change_lane()) {
     PrioritizeChangeLane(true, reference_line_info);
     return Status::OK();
@@ -62,6 +68,8 @@ Status LaneChangeDecider::Process(
                           ->mutable_change_lane();
   double now = Clock::NowInSeconds();
 
+  // Note: 非变道场景下，这个字段一直是false的
+  // 在变道时，刷新这个字段
   prev_status->set_is_clear_to_change_lane(false);
   if (current_reference_line_info->IsChangeLanePath()) {
     prev_status->set_is_clear_to_change_lane(
@@ -72,13 +80,16 @@ Status LaneChangeDecider::Process(
   if (!prev_status->has_status()) {
     UpdateStatus(now, ChangeLaneStatus::CHANGE_LANE_FINISHED,
                  GetCurrentPathId(*reference_line_info));
+    // Note: the last time stamp when the lane-change planning succeed.
+    // Note: 上一次变道规划成功的时间，注意，并不是变道成功的时间戳
+    // 就是说某一帧的lane change reference line的规划是没有任何fallback的
     prev_status->set_last_succeed_timestamp(now);
     return Status::OK();
   }
 
   bool has_change_lane = reference_line_info->size() > 1;
   ADEBUG << "has_change_lane: " << has_change_lane;
-  // Note: 非变道场景
+  // Note: 非变道场景，简单地更新状态
   if (!has_change_lane) {
     const auto& path_id = reference_line_info->front().Lanes().Id();
     if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FINISHED) {
@@ -88,6 +99,7 @@ Status LaneChangeDecider::Process(
       UpdateStatus(now, ChangeLaneStatus::CHANGE_LANE_FINISHED, path_id);
     } else if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FAILED) {
       // Note: 变道失败，但却进入了目标车道，不更新一下状态么？
+      // Note: 现在好像永远不会进入到这个CHANGE_LANE_FAILED的状态的
     } else {
       const std::string msg =
           absl::StrCat("Unknown state: ", prev_status->ShortDebugString());
@@ -97,6 +109,7 @@ Status LaneChangeDecider::Process(
     return Status::OK();
   } else {  // has change lane in reference lines.
     auto current_path_id = GetCurrentPathId(*reference_line_info);
+    // Note: 有两条参考线，却没有找到变道的参考线passage，返回异常
     if (current_path_id.empty()) {
       const std::string msg = "The vehicle is not on any reference line";
       AERROR << msg;
@@ -154,6 +167,8 @@ Status LaneChangeDecider::Process(
   return Status::OK();
 }
 
+// Note: 这个static函数在lane_follow_stage中被使用
+// Note: 重新计算开始变道的预估位置
 void LaneChangeDecider::UpdatePreparationDistance(
     const bool is_opt_succeed, const Frame* frame,
     const ReferenceLineInfo* const reference_line_info) {
@@ -164,6 +179,7 @@ void LaneChangeDecider::UpdatePreparationDistance(
   ADEBUG << "Lane Change Status: " << lane_change_status->status();
   // If lane change planning succeeded, update and return
   if (is_opt_succeed) {
+    // Note: 记录变道规划成功的时间
     lane_change_status->set_last_succeed_timestamp(Clock::NowInSeconds());
     lane_change_status->set_is_current_opt_succeed(true);
     return;
@@ -192,28 +208,35 @@ void LaneChangeDecider::UpdatePreparationDistance(
   // refresh the preparation distance
   if (adc_sl_info.first[0] + FLAGS_min_lane_change_prepare_length >
       point_sl.s()) {
+    // Note: 会在path_bound_decider中重新算一个lane_change_start_position
     lane_change_status->set_exist_lane_change_start_position(false);
     ADEBUG << "Refresh the lane-change preparation distance";
   }
 }
 
+// Note: 设置lane_change_status的timestamp/path_id/status
 void LaneChangeDecider::UpdateStatus(ChangeLaneStatus::Status status_code,
                                      const std::string& path_id) {
   UpdateStatus(Clock::NowInSeconds(), status_code, path_id);
 }
 
+// Note: 设置lane_change_status的timestamp/path_id/status
 void LaneChangeDecider::UpdateStatus(double timestamp,
                                      ChangeLaneStatus::Status status_code,
                                      const std::string& path_id) {
   auto* lane_change_status = PlanningContext::Instance()
                                  ->mutable_planning_status()
                                  ->mutable_change_lane();
+  // Note: the time stamp when the state started
   lane_change_status->set_timestamp(timestamp);
+  // Note: the id of the route segment that the vehicle is driving on
   lane_change_status->set_path_id(path_id);
   lane_change_status->set_status(status_code);
 }
 
 // Note: 如果变道优先则将ChangeLanePath放到前面，否则将非变道Path放到前面
+// Note: 放前面放后面有影响，因为不是对所有参考线都执行规划流程
+// Note: 至于为什么参考线存放顺序对规划流程有影响，查看ExecuteTaskOnReferenceLine函数
 void LaneChangeDecider::PrioritizeChangeLane(
     const bool is_prioritize_change_lane,
     std::list<ReferenceLineInfo>* reference_line_info) const {
@@ -268,11 +291,14 @@ void LaneChangeDecider::RemoveChangeLane(
   }
 }
 
-// Note: Vehicle所在的车道
+// Note: 如果是处于变道区间内，则返回目标车道所在的passage的index字符串
+//       就是该Passage在RoutingResponse中的road_index + "_" + passage_index"
+//       如果不处于变道区间，则返回空字符串
 std::string LaneChangeDecider::GetCurrentPathId(
     const std::list<ReferenceLineInfo>& reference_line_info) const {
   for (const auto& info : reference_line_info) {
     if (!info.IsChangeLanePath()) {
+      // Note: 这个就是该Passage在RoutingResponse中的road_index + "_" + passage_index"
       return info.Lanes().Id();
     }
   }

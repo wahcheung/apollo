@@ -116,7 +116,8 @@ Stage::StageStatus LaneFollowStage::Process(
 
   unsigned int count = 0;
 
-  // Note: 尝试在每一条参考线上做规划
+  // Note: 对list中的参考线做规划，如果某条参考线规划成功，则退出循环
+  // 这个操作导致参考线的存放顺序是很关键的
   for (auto& reference_line_info : *frame->mutable_reference_line_info()) {
     // TODO(SHU): need refactor
     if (count++ == frame->mutable_reference_line_info()->size()) {
@@ -126,6 +127,7 @@ Stage::StageStatus LaneFollowStage::Process(
     ADEBUG << "IsChangeLanePath: " << reference_line_info.IsChangeLanePath();
 
     if (has_drivable_reference_line) {
+      // Note: 如果前面的参考线规划成功了，则不再对余下的参考线进行规划
       reference_line_info.SetDrivable(false);
       break;
     }
@@ -149,6 +151,7 @@ Stage::StageStatus LaneFollowStage::Process(
                                                        &reference_line_info);
           ADEBUG << "\tclear for lane change";
         } else {
+          // Note: 会致使后面到path_bound_decider时，重新刷一个lane_change_start_position
           LaneChangeDecider::UpdatePreparationDistance(false, frame,
                                                        &reference_line_info);
           reference_line_info.SetDrivable(false);

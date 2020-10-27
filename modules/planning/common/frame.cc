@@ -539,6 +539,9 @@ const ReferenceLineInfo *Frame::FindDriveReferenceLineInfo() {
   return drive_reference_line_info_;
 }
 
+// Note: 目标车道
+// Note: 如果车进入了变道区间，则这里返回变道的目标车道参考线
+//       否则，就返回自车所在的参考线
 const ReferenceLineInfo *Frame::FindTargetReferenceLineInfo() {
   const ReferenceLineInfo *target_reference_line_info = nullptr;
   for (const auto &reference_line_info : reference_line_info_) {

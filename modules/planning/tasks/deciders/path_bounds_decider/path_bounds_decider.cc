@@ -150,7 +150,12 @@ Status PathBoundsDecider::Process(
   }
 
   // If it's a lane-change reference-line, generate lane-change path boundary.
+  // Note: FLAGS_enable_smarter_lane_change配置是true的
+  // 这个enable_smarter_lane_change是指别让adc一进入变道区间就马上变道，这样显得更智能一些
+  // 别让adc马上变道的关键处理在于，在对目标参考线进行规划时，
+  // 如果判断当前时刻not clear to change lane，把boundary缩小，别让adc进入目标车道
   if (FLAGS_enable_smarter_lane_change &&
+      // Note: 只对变道的目标参考线执行这个GenerateLaneChangePathBound过程
       reference_line_info->IsChangeLanePath()) {
     PathBound lanechange_path_bound;
     Status ret = GenerateLaneChangePathBound(*reference_line_info,
@@ -403,6 +408,7 @@ Status PathBoundsDecider::GenerateLaneChangePathBound(
   // PathBoundsDebugString(*path_bound);
 
   // 3. Remove the S-length of target lane out of the path-bound.
+  // Note: 如果not is_clear_to_change_lane，则把boundary收窄，不进入目标车道
   GetBoundaryFromLaneChangeForbiddenZone(reference_line_info, path_bound);
 
   PathBound temp_path_bound = *path_bound;
@@ -1303,6 +1309,7 @@ void PathBoundsDecider::ConvertBoundarySAxisFromLaneCenterToRefLine(
   }
 }
 
+// Note: 如果变道clear，则不对boundary做处理，并且置exist lane change start position为假
 void PathBoundsDecider::GetBoundaryFromLaneChangeForbiddenZone(
     const ReferenceLineInfo& reference_line_info, PathBound* const path_bound) {
   // Sanity checks.
@@ -1314,11 +1321,17 @@ void PathBoundsDecider::GetBoundaryFromLaneChangeForbiddenZone(
   auto* lane_change_status = PlanningContext::Instance()
                                  ->mutable_planning_status()
                                  ->mutable_change_lane();
+  // Note: 进入变道区间的时候，在LaneChangeDecider中检查是is_clear_to_change_lane的
+  // Note: 如果目前是is_clear_to_change_lane的，就没有必要阻止adc变道了
   if (lane_change_status->is_clear_to_change_lane()) {
     ADEBUG << "Current position is clear to change lane. No need prep s.";
+    // Note: 每当is_clear_to_change_lane，就把延迟变道的起始点关闭
     lane_change_status->set_exist_lane_change_start_position(false);
+    // Note: 一旦发现是is_clear_to_change_lane的，马上开始变道
+    // 如果下一帧变成了not clear，则又不变道了，车可能摆来摆去
     return;
   }
+  // Note: 如果周围环境还不适合变道，则把boundary收窄，不进入目标车道
   double lane_change_start_s = 0.0;
   if (lane_change_status->exist_lane_change_start_position()) {
     common::SLPoint point_sl;
@@ -1336,6 +1349,7 @@ void PathBoundsDecider::GetBoundaryFromLaneChangeForbiddenZone(
     common::math::Vec2d lane_change_start_xy;
     reference_line.SLToXY(lane_change_start_sl, &lane_change_start_xy);
     lane_change_status->set_exist_lane_change_start_position(true);
+    // Note: 这是全局唯一设置变道起始点的地方
     lane_change_status->mutable_lane_change_start_position()->set_x(
         lane_change_start_xy.x());
     lane_change_status->mutable_lane_change_start_position()->set_y(
@@ -1367,16 +1381,28 @@ void PathBoundsDecider::GetBoundaryFromLaneChangeForbiddenZone(
     curr_lane_left_width -= offset_to_map;
     curr_lane_right_width += offset_to_map;
 
+    // Note: 下面的处理逻辑画个图会清楚很多
+    // 处理逻辑就是，基于现在not clear_to_change_lane的情况，
+    // 不能让adc进行变道path的规划，于是把adc变道方向的boundary缩小至adc_l扩充0.1米处
+
+    // Note: 处理右边界
     std::get<1>((*path_bound)[i]) =
         adc_frenet_l_ > curr_lane_left_width
+            // Note: adc需要变道到右边车道，现在在目标车道外面，先别让adc进来目标车道
             ? curr_lane_left_width + GetBufferBetweenADCCenterAndEdge()
+            // Note: adc需要变道到左边车道，boundary的右边界无需改动
             : std::get<1>((*path_bound)[i]);
+    // Note: 确保adc在boundary中，避免无解
     std::get<1>((*path_bound)[i]) =
         std::fmin(std::get<1>((*path_bound)[i]), adc_frenet_l_ - 0.1);
+    // Note: 处理左边界
     std::get<2>((*path_bound)[i]) =
         adc_frenet_l_ < -curr_lane_right_width
+            // Note: adc需要变道到左边车道，先别让adc进来目标车道
             ? -curr_lane_right_width - GetBufferBetweenADCCenterAndEdge()
+            // Note: adc需要向右变道，左边界不需要做特殊处理
             : std::get<2>((*path_bound)[i]);
+    // Note: 确保adc在boundary中，避免无解
     std::get<2>((*path_bound)[i]) =
         std::fmax(std::get<2>((*path_bound)[i]), adc_frenet_l_ + 0.1);
   }
