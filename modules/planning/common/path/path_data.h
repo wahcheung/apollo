@@ -33,6 +33,10 @@
 namespace apollo {
 namespace planning {
 
+// Note: 存放Path相关的信息，例如
+// discretized_path_, frenet_path_, path_point_decision_guide_
+// path_label_, blocking_obstacle_id_以及产生这条Path的reference_line_
+// Note: 还提供了一些与Path相关的工具函数
 class PathData {
  public:
   enum class PathPointType {
