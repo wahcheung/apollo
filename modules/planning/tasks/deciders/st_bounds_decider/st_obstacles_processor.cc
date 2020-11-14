@@ -58,6 +58,8 @@ void STObstaclesProcessor::Init(const double planning_distance,
   planning_distance_ = planning_distance;
   path_data_ = path_data;
   vehicle_param_ = common::VehicleConfigHelper::GetConfig().vehicle_param();
+  // Note: adc_path_init_s_一般就是0.0
+  // 具体原因查看PathData::SetFrenetPath，将frenet path转成xy时，对第一个点的s置0了，后面累加
   adc_path_init_s_ = path_data_.discretized_path().front().s();
   path_decision_ = path_decision;
 
@@ -99,6 +101,7 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
   // Note: 找ADC的低路权路段
   // Note: 下面这一顿操作就是为了算哪些segments(start_s, end_s)是不在原车道上的
   // 不在原来车道上时，路权低(low road right)
+  // Note: path_point_decision_guide是在path_assessment_decider中给出的
   bool is_adc_low_road_right_beginning = true;
   for (const auto& path_pt_info : path_data_.path_point_decision_guide()) {
     double path_pt_s = 0.0;
@@ -137,7 +140,10 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
     // Draw the obstacle's st-boundary.
     std::vector<STPoint> lower_points;
     std::vector<STPoint> upper_points;
+    // Note: 障碍物当前位置是否完全处于adc的低路权区间内
     bool is_caution_obstacle = false;
+    // Note: 障碍物离开adc低路权区间的时间，过了这个时刻，adc重新处于高路权
+    // Note: 如果adc不离开参考线所在的车道，就不会有低路权路段，这个obs_caution_end_t还是0.0
     double obs_caution_end_t = 0.0;
     if (!ComputeObstacleSTBoundary(*obs_ptr, &lower_points, &upper_points,
                                    &is_caution_obstacle, &obs_caution_end_t)) {
@@ -148,13 +154,36 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
       continue;
     }
 
+/*
+  是正向行驶障碍物的STBoundary大致形状，横轴为t，纵轴为s
+                    .
+              .     | 
+         .          |
+    .               .
+    |         .
+    |    .
+    .
+*/
+
+/*
+  是逆向行驶障碍物的STBoundary大致形状，横轴为t，纵轴为s
+    .
+    |    .
+    |         .
+    .               .
+         .          |
+              .     |
+                    .
+*/
+
     // Note: 根据boundary point创建STBoundary(这个继承自Polygon)
+    // Note: 即使是逆行车辆，它的STBoundary也是可以正常创建的，并且最终的polygon与正常行驶的障碍物一样
     auto boundary =
         STBoundary::CreateInstanceAccurate(lower_points, upper_points);
     boundary.set_id(obs_ptr->Id());
     if (is_caution_obstacle) {
-      // Note: 障碍物第一个点与自车path在自车的低路权区间内overlap，
-      // 即障碍物目前位于自车path低路权区间内
+      // Note: 障碍物第一个点的overlap_s完全位于自车的低路权区间内，
+      // 本意是障碍物目前位于自车path低路权区间内，但具体实现偏离了这个想法
       // Note: 障碍物在自车path低路权路段最晚的relative time(基于障碍物轨迹的timestamp)
       // Note: 这个obs_caution_end_t记录什么时候不需要再cautious?
       boundary.set_obstacle_road_right_ending_t(obs_caution_end_t);
@@ -162,6 +191,8 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
     // Update the trimmed obstacle into alternative st-bound storage
     // for later uses.
     // Note: 把obs_caution_end_t后面的ST point删除，作为alternative_boundary
+    // Remind(huachang): 如果自车没有低路权区间，那么这个polygon的点几乎全被删了，只留下上下各两个点
+    // Remind(huachang): 由于两个点列的点数是一样的，这里完全可以把两个while循环合成一个
     while (lower_points.size() > 2 &&
            lower_points.back().t() > obs_caution_end_t) {
       lower_points.pop_back();
@@ -206,18 +237,24 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
       // Note: ST Point的s值都来自adc_path_points的s，
       // 这个值不可能小于adc_path_init_s_，最多就是等于
       // 也就是说，这里的逻辑就是如果障碍物在kTIgnoreThreshold之后才与adc_path_init_s_相交，则忽略这个障碍物
-      // Remind(huachang): 这样做好像也还算合理，去掉的话，可能会让后车逼adc前行
-      // 后面好好看看这里可以怎么优化
+      // Remind(huachang): 原意就是在本车道行驶时不管后方车辆，但有些特殊情况会出现危险
       if (boundary.bottom_left_point().s() - adc_path_init_s_ <
               kSIgnoreThreshold &&
           boundary.bottom_left_point().t() > kTIgnoreThreshold) {
         // Ignore obstacles that are behind.
         // TODO(jiacheng): don't ignore if ADC is in dangerous segments.
+        // Note: 这个障碍物在一段时间后会穿过adc的位置(adc_path_init_s_)
+        // Remind(huachang): 这个处理有问题的，旁边的车怼过来了有可能因为这个被ignore掉
+        // 经过仿真测试，有几种情况会导致障碍物因为这个判断而被ignore:
+        // 1. 正后方障碍物一段时间后会经过adc_path_init_point
+        // 2. 斜后方的车辆准备cutin，预测第一个与path有overlap的点为adc_path_init_point
+        // 3. 斜前方的逆行车辆要cutin，预测线中第一个与path有overlap的点为adc_path_init_point
         continue;
       }
       // Note: 注意，静态障碍物目前没添加到这里
       // Note: 后面会把最近的需要stop的障碍物的boundary添加进来
       obs_id_to_st_boundary_[obs_ptr->Id()] = boundary;
+      // Note: st_boundary从这里写进了path_decision中
       obs_ptr->set_path_st_boundary(boundary);
       non_ignore_obstacles.insert(obs_ptr->Id());
       ADEBUG << "Adding " << obs_ptr->Id() << " into the ST-graph.";
@@ -253,6 +290,7 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
         }
       }
     }
+    // Note: 所以obs_id_to_st_boundary_里面包含了所有不被ignore的动态障碍物以及closest_stop_obs_boundary
     obs_id_to_st_boundary_[closest_stop_obs_id] = closest_stop_obs_boundary;
     closest_stop_obs_ptr->set_path_st_boundary(closest_stop_obs_boundary);
     non_ignore_obstacles.insert(closest_stop_obs_id);
@@ -288,7 +326,7 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
                               it.second.upper_right_point().s(), it.first);
   }
   // Sort the edges.
-  // Note: 按照start_t从小到大排序
+  // Note: 根据t从小到大排序，如果t相同，则is_starting_t的edge优先
   std::sort(obs_t_edges_.begin(), obs_t_edges_.end(),
             [](const ObsTEdge& lhs, const ObsTEdge& rhs) {
               if (std::get<1>(lhs) != std::get<1>(rhs)) {
@@ -306,7 +344,7 @@ STObstaclesProcessor::GetAllSTBoundaries() {
   return obs_id_to_st_boundary_;
 }
 
-// Note: 根据yield/stop/overtake的decision，决定车速上下界
+// Note: 根据yield/stop/overtake的decision，以及boundary的斜率，决定车速上下界
 bool STObstaclesProcessor::GetLimitingSpeedInfo(
     double t, std::pair<double, double>* const limiting_speed_info) {
   if (obs_id_to_decision_.empty()) {
@@ -341,7 +379,7 @@ bool STObstaclesProcessor::GetLimitingSpeedInfo(
   return s_min <= s_max;
 }
 
-// Note: 在ST图中在t位置做垂线
+// Note: ST图中在t位置做垂线，对垂线做line sweep，找出gaps，然后基于每种gap对obstacles做decision
 bool STObstaclesProcessor::GetSBoundsFromDecisions(
     double t, std::vector<std::pair<double, double>>* const available_s_bounds,
     std::vector<std::vector<std::pair<std::string, ObjectDecisionType>>>* const
@@ -355,10 +393,13 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
   // Note: 新扫到的edges
   std::vector<ObsTEdge> new_t_edges;
   // Note: ObsTEdge contains: (is_starting_t, t, s_min, s_max, obs_id).
+  // Note: 传进来的t以0.1秒的step递增，这就是一个sweep line从左往右扫obs_t_edges_
+  // 这一轮扫到的obs_t_edge都放到new_t_edges中
   while (obs_t_edges_idx_ < static_cast<int>(obs_t_edges_.size()) &&
          std::get<1>(obs_t_edges_[obs_t_edges_idx_]) <= t) {
     if (std::get<0>(obs_t_edges_[obs_t_edges_idx_]) == 0 &&
         std::get<1>(obs_t_edges_[obs_t_edges_idx_]) == t) {
+      // Note: t时刻之前(包含t时刻)已经没有剩余的入边了
       // Note: obs_t_edges_中的edge都是排好序的
       // Note: 这里直接break了是不是有bug，后面可能还会有符合这个判断的edge，
       //       即有多个障碍物的st boundary的右边界在同一个时刻t
@@ -368,6 +409,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
     ADEBUG << "Seeing a new t-edge at t = "
            << std::get<1>(obs_t_edges_[obs_t_edges_idx_]);
     new_t_edges.push_back(obs_t_edges_[obs_t_edges_idx_]);
+    // 扫面线往右
     ++obs_t_edges_idx_;
   }
 
@@ -395,7 +437,9 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
     auto obs_decision = obs_id_to_decision_pair.second;
     auto obs_st_boundary = obs_id_to_st_boundary_[obs_id];
     if (obs_decision.has_overtake() &&
+        // Note: adc越过overlap起始点已经过了一段时间
         obs_st_boundary.min_t() <= t - kOvertakenObsCautionTime &&
+        // Note: adc越过低路权区间已经过了一段时间
         obs_st_boundary.obstacle_road_right_ending_t() <=
             t - kOvertakenObsCautionTime) {
       obs_id_to_remove.push_back(obs_id_to_decision_pair.first);
@@ -412,6 +456,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
           obs_id_to_alternative_st_boundary_[obs_id];
       obs_id_to_st_boundary_[obs_id].SetBoundaryType(
           STBoundary::BoundaryType::OVERTAKE);
+      // Note: 如果判断overtake，就将obstacle的path_st_boundary替换为alternative_st_boundary
       obs_ptr->set_path_st_boundary(obs_id_to_alternative_st_boundary_[obs_id]);
     }
   }
@@ -458,6 +503,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
       if (std::get<2>(obs_t_edge) >= s_max) {
         ADEBUG << "  Apparently, it should be yielded.";
         obs_id_to_decision_[std::get<4>(obs_t_edge)] =
+            // Note: 根本没必要调下面这个函数，这里直接给yield决策就是了
             DetermineObstacleDecision(std::get<2>(obs_t_edge),
                                       std::get<3>(obs_t_edge), s_max);
         obs_id_to_st_boundary_[std::get<4>(obs_t_edge)].SetBoundaryType(
@@ -465,6 +511,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
       } else if (std::get<3>(obs_t_edge) <= s_min) {
         ADEBUG << "  Apparently, it should be overtaken.";
         obs_id_to_decision_[std::get<4>(obs_t_edge)] =
+            // Note: 根本没必要调下面这个函数，这里直接给overtake决策就是了
             DetermineObstacleDecision(std::get<2>(obs_t_edge),
                                       std::get<3>(obs_t_edge), s_min);
         obs_id_to_st_boundary_[std::get<4>(obs_t_edge)].SetBoundaryType(
@@ -496,12 +543,15 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
           DetermineObstacleDecision(obs_s_min, obs_s_max,
                                     (s_gap.first + s_gap.second) / 2.0));
     }
+    // Note: 选择每个可能的gap时，对障碍物的决策是不一样的，把这些不一样的gap对应的obs_decisions记录下来
     available_obs_decisions->push_back(obs_decisions);
   }
 
   return true;
 }
 
+// Note: 将决策信息写入obs_id_to_decision_和obs_id_to_st_boundary_
+// 同时将决策信息写入history_
 void STObstaclesProcessor::SetObstacleDecision(
     const std::string& obs_id, const ObjectDecisionType& obs_decision) {
   obs_id_to_decision_[obs_id] = obs_decision;
@@ -530,7 +580,7 @@ void STObstaclesProcessor::SetObstacleDecision(
 ///////////////////////////////////////////////////////////////////////////////
 // Private helper functions.
 // Note: is_caution_obstacle: 障碍物第一个点与自车path在低路权区间内overlap
-//       即障碍物目前位于自车path低路权区间内
+//       即障碍物目前位于自车path低路权区间内(只有自车离开离开参考线所在的lane时才会出现低路权的情况)
 // obs_caution_end_t:
 // 1. 静态障碍物的obs_caution_end_t = planning_time_
 // 或者
@@ -558,7 +608,7 @@ bool STObstaclesProcessor::ComputeObstacleSTBoundary(
     // Get the overlapping s between ADC path and obstacle's perception box.
     const Box2d& obs_box = obstacle.PerceptionBoundingBox();
     std::pair<double, double> overlapping_s;
-    // Note: overlapping_s两边端点不一定与障碍物overlap
+    // Note: 找path与obs_box有overlap的s区间
     if (GetOverlappingS(adc_path_points, obs_box, kADCSafetyLBuffer,
                         &overlapping_s)) {
       // Note: 自车位于overlapping_s区间内时，会与障碍物有overlap
@@ -575,27 +625,35 @@ bool STObstaclesProcessor::ComputeObstacleSTBoundary(
     // Go through every occurrence of the obstacle at all timesteps, and
     // figure out the overlapping s-max and s-min one by one.
     bool is_obs_first_traj_pt = true;
+    // Note: 想象一下如果障碍物是逆行车辆，下面的处理结果会与正常行驶的动态障碍物有什么不一样
     for (const auto& obs_traj_pt : obs_trajectory.trajectory_point()) {
       // TODO(jiacheng): Currently, if the obstacle overlaps with ADC at
       // disjoint segments (happens very rarely), we merge them into one.
       // In the future, this could be considered in greater details rather
       // than being approximated.
+      // Note: 意思是，即使某个obs_traj_pt没有产生overlap，
+      // 但由于前后的点有overlap而导致，ST图中这个位置是不可通行的(被包含在ST polygon里面)
       const Box2d& obs_box = obstacle.GetBoundingBox(obs_traj_pt);
       ADEBUG << obs_box.DebugString();
       std::pair<double, double> overlapping_s;
       if (GetOverlappingS(adc_path_points, obs_box, kADCSafetyLBuffer,
                           &overlapping_s)) {
         ADEBUG << "Obstacle instance is overlapping with ADC path.";
-        // Note: 这里的ST boundary point的时间竟然是按照障碍物的轨迹点的relative_time定的
+        // Note: 这里的ST boundary point的时间是按照障碍物的轨迹点的relative_time定的
         // Note: lower_points和upper_points都是一起添加的，t是一样的
+        // Note: 如果障碍物行驶方向与自车方向相反，则这些lower_points/upper_points的s值是从大到小排的
         lower_points->emplace_back(overlapping_s.first,
                                    obs_traj_pt.relative_time());
         upper_points->emplace_back(overlapping_s.second,
                                    obs_traj_pt.relative_time());
         // Note: 对障碍物当前位置做判断
+        // Note: 只有当障碍物当前就在adc低路权区间时，才会成为一个caution_obstacle
         if (is_obs_first_traj_pt) {
           // Note: 障碍物第一个轨迹点处于自车低路权区域
           // Note: 即障碍物目前处于高路权状态，adc需要避让该障碍物
+          // Note: 这里要求overlapping_s完全位于自车的低路权区间内，非常不合理
+          // 万一这个障碍物是个超级长的大货车，那么这个障碍物就因此无法成为一个需要caution的障碍物了
+          // Remind(huachang): 这里是不是应该改成区间有交集就应该是is_caution_obstacle
           if (IsSWithinADCLowRoadRightSegment(overlapping_s.first) ||
               IsSWithinADCLowRoadRightSegment(overlapping_s.second)) {
             *is_caution_obstacle = true;
@@ -610,6 +668,7 @@ bool STObstaclesProcessor::ComputeObstacleSTBoundary(
       }
       is_obs_first_traj_pt = false;
     }
+    // Note: 如果障碍物的轨迹只有一个点与adc的path是overlap的，就补一小截用于形成一个四边形
     if (lower_points->size() == 1) {
       lower_points->emplace_back(lower_points->front().s(),
                                  lower_points->front().t() + 0.1);
@@ -630,34 +689,51 @@ bool STObstaclesProcessor::GetOverlappingS(
   // Locate the possible range to search in details.
   // Note: 为什么搜索范围用[0, adc_path_points.size()) - 2] ?
   // Note: 是为了能取到下一个点，用于确定朝向（GetSBoundingPathPointIndex里面用到朝向）
-  // Note: 你可能问那如果最后一个点也是overlap的，那这逻辑是不是就没把最后一个点算到overlap_s里面
-  //       不是的，这个在这个函数后面有做处理
+  // Note: 这里的逻辑要求adc_path_points.size不小于2
+  // Note: 跟在obstacle屁股后面距离超过front_edge_to_center的临界点
+  // Note: 由于传入的点不包含最后一个点，因此最后一个点不在考虑范围内
   int pt_before_idx = GetSBoundingPathPointIndex(
       adc_path_points, obstacle_instance, vehicle_param_.front_edge_to_center(),
       true, 0, static_cast<int>(adc_path_points.size()) - 2);
   ADEBUG << "The index before is " << pt_before_idx;
+  // Note: 在障碍物前方超过back_edge_to_center距离的临界点
   int pt_after_idx = GetSBoundingPathPointIndex(
       adc_path_points, obstacle_instance, vehicle_param_.back_edge_to_center(),
       false, 0, static_cast<int>(adc_path_points.size()) - 2);
   ADEBUG << "The index after is " << pt_after_idx;
+  // Note: adc_path_points的倒数第二个点在障碍物屁股后面至少front_edge_to_center的距离
+  // 认为障碍物与path不会有overlap
+  // Note: 但是，实际上，最后一个点可能与障碍物时有overlap的
   if (pt_before_idx == static_cast<int>(adc_path_points.size()) - 2) {
     return false;
   }
+  // Note: adc_path_points的第一个点在障碍物前方至少back_edge_to_center的距离
+  // 认为障碍物与path不会有overlap
   if (pt_after_idx == 0) {
     return false;
   }
 
   // Note: 没找到pt_before_idx，第一个点都不满足要求
+  // 即所有path point都不满足在障碍物屁股后面距离大于front_edge_to_center的条件
+  // 注意，这并不是说障碍物在s方向上与path没有overlap，可能在区间[0, front_edge_to_center)内overlap了
   if (pt_before_idx == -1) {
     pt_before_idx = 0;
   }
-  // Note: 没找到pt_after_idx，最后一个点都不符合要求
+  // Note: 没找到pt_after_idx，倒数第二个点都不符合要求
+  // 即所有path point都不满足在障碍物前方距离超过back_edge_to_center的条件
+  // Note: 此时，障碍物可能与path末尾那些点有overlap
   if (pt_after_idx == -1) {
     pt_after_idx = static_cast<int>(adc_path_points.size()) - 2;
   }
+  // Remind(huachang): 什么时候会出现这种情况?
   if (pt_before_idx >= pt_after_idx) {
     return false;
   }
+
+  // Note: 注意，上面这一通操作并不理会障碍物是否真的与path有overlap，
+  // 只是检查障碍物在s方向上是否接近path，算出来的这个[pt_before_idx, pt_after_idx]区间，
+  // 可能在横向上与障碍物距离非常远，从而没有overlap
+  // 上面这个过程只是为了筛选可能的overlap区间，减少调用IsADCOverlappingWithObstacle的次数(因为这个比较耗时)
 
   // Detailed searching.
   // Note: 找与obstacle_instance有overlap的区间边界(overlapping_s)
@@ -672,6 +748,7 @@ bool STObstaclesProcessor::GetOverlappingS(
                                      adc_l_buffer)) {
       // Note: overlapping_s的first和second都是adc_path_points的s值
       // Note: 这些ST boundary的s值指的都是adc path的s值
+      // Note: 这里尝试把下标往前移一位，试图获得真的没有overlap的区间起点
       overlapping_s->first = adc_path_points[std::max(i - 1, 0)].s();
       has_overlapping = true;
       ADEBUG << "There is overlapping.";
@@ -686,6 +763,10 @@ bool STObstaclesProcessor::GetOverlappingS(
     ADEBUG << "At ADC path index = " << i << " :";
     if (IsADCOverlappingWithObstacle(adc_path_points[i], obstacle_instance,
                                      adc_l_buffer)) {
+      // Note: 这里把下标往后移一位，试图获得真的没有overlap的区间终点
+      // 但是，上面的pt_before_idx如果刚好是倒数第二个点的话，由于前面从未考虑过最后一个点是否overlap，
+      // 有可能这个overlapping_s->second代表的位置与障碍物时overlap的
+      // 在这里，也算是把最后一个点考虑上了吧
       overlapping_s->second = adc_path_points[i + 1].s();
       ADEBUG << "There is overlapping.";
       break;
@@ -694,6 +775,14 @@ bool STObstaclesProcessor::GetOverlappingS(
   return true;
 }
 
+// Note: 二分法查找s方向上距离obstacle_instance超过s_thresh的临界adc_path_point点，临界点的下标
+// Note: 如果没找到符合要求的临界点，就返回-1
+// Note: is_before表示要求path point在障碍物屁股后面
+// Note: 如果传入的is_before为真，
+//         则把adc_path_points中在obstacle_instance屁股后方至少s_thresh距离的最后一个点的下标返回
+//       如果传入的is_before为假，
+//         则把adc_path_points中在obstacle_instance前方至少s_thresh距离的第一个点的下标返回
+// Note: 当path是是圆弧形状时(大拐弯)，可能会出现比较奇怪的结果
 int STObstaclesProcessor::GetSBoundingPathPointIndex(
     const std::vector<PathPoint>& adc_path_points,
     const Box2d& obstacle_instance, const double s_thresh, const bool is_before,
@@ -736,10 +825,13 @@ int STObstaclesProcessor::GetSBoundingPathPointIndex(
   }
 }
 
-// Note: 检查障碍物是否在纵向上给定的朝向(is_before)远离PathPoint
+// Note: 检查障碍物是否在由direction_point给定的朝向上远离PathPoint
 // Note: 检查障碍物在纵向方向上是否远离path_point(至少s_thresh距离)
 // Note: 这个不考虑横向距离，只是把障碍物Polygon的各个corner point投映到轨迹段的截面上
 // 然后检查所有corner point到截面的距离，距离超过s_thresh的话认为是Far Away的
+// Note: 具体来说就是，
+//       如果is_before为真，则判断障碍物是否满足在path_point前方，并且距离不小于s_thresh
+//       如果is_before为假，则判断障碍物是否满足在path_point后方，并且距离不小于s_thresh
 bool STObstaclesProcessor::IsPathPointAwayFromObstacle(
     const PathPoint& path_point, const PathPoint& direction_point,
     const Box2d& obs_box, const double s_thresh, const bool is_before) {
@@ -754,12 +846,31 @@ bool STObstaclesProcessor::IsPathPointAwayFromObstacle(
 
   auto corner_points = obs_box.GetAllCorners();
   for (const auto& corner_pt : corner_points) {
-    // Note: 垂足
+
+/*  pc
+    .  <--这是corner_pt
+    |
+    |  <--这是perpendicular_vec
+    |
+    |   pd
+    |   .
+    |   |  <--这是轨迹段，由path的两个相邻点构成
+----.---.  <--这条横线是normal_line_seg，垂直于轨迹段；
+    pf  pp
+
+各个点表示，
+  pc(corner point), 即corner_pt
+  pf(foot point), 即normal_line_ft_pt
+  pp(path point), 即path_pt
+  pd(direction point), 即direction_point
+*/
+    // Note: 障碍物corner_point引垂线到轨迹段的垂线
     Vec2d normal_line_ft_pt;
-    // Note: 将障碍物的corner point投映到垂线上
+    // Note: 将障碍物的corner point投映到垂线上，得到normal_line_ft_pt
     normal_line_seg.GetPerpendicularFoot(corner_pt, &normal_line_ft_pt);
     // Note: 轨迹段朝向
     Vec2d path_dir_unit_vec = path_dir_lineseg.unit_direction();
+    // Note: 障碍物corner point到轨迹做的垂线段
     Vec2d perpendicular_vec = corner_pt - normal_line_ft_pt;
     // Note: corner point在path_point前方多远的距离
     // Note: 如果corner point在path_point后面，则这个corner_pt_s_dist是负值
@@ -805,6 +916,7 @@ bool STObstaclesProcessor::IsADCOverlappingWithObstacle(
 std::vector<std::pair<double, double>> STObstaclesProcessor::FindSGaps(
     const std::vector<ObsTEdge>& obstacle_t_edges, double s_min, double s_max) {
   std::vector<std::pair<double, int>> obs_s_edges;
+  // Note: ObsTEdge contains: (is_starting_t, t, s_min, s_max, obs_id)
   for (auto obs_t_edge : obstacle_t_edges) {
     // Note: 入边
     obs_s_edges.emplace_back(std::get<2>(obs_t_edge), 1);
@@ -821,8 +933,10 @@ std::vector<std::pair<double, double>> STObstaclesProcessor::FindSGaps(
       obs_s_edges.begin(), obs_s_edges.end(),
       [](const std::pair<double, int>& lhs, const std::pair<double, int>& rhs) {
         if (lhs.first != rhs.first) {
+          // Note: 按照s位置从小到大排列
           return lhs.first < rhs.first;
         } else {
+          // Note: 如果s位置相同，则入边在前
           return lhs.second > rhs.second;
         }
       });

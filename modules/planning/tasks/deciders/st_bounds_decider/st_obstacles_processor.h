@@ -211,6 +211,7 @@ class STObstaclesProcessor {
       obs_t_edges_;
   int obs_t_edges_idx_;
 
+  // Note: 与自车path有overlap的动态障碍物以及最近的需要stop的障碍物的STBoundary
   std::unordered_map<std::string, STBoundary> obs_id_to_st_boundary_;
   // Note: 对障碍物的decision，当扫面线越过（到达）obstacle st右边界时，
   // 会erase该obstacle的decision
@@ -221,7 +222,8 @@ class STObstaclesProcessor {
 
   // Note: 障碍物ID对应的alternative_st_boundary
   // Note: 这里面的障碍物的boundary经过删减，删除了低路权之后的点
-  // Note: 比obs_id_to_st_boundary_多了静态障碍物
+  // Note: 对于那些没有在自车低路权区间的障碍物，它的STBoundary被删到只剩下上下各两个点(最左边的上下两个点及其相邻的两个点)
+  // Note: 比obs_id_to_st_boundary_多了一些静态障碍物
   std::unordered_map<std::string, STBoundary>
       obs_id_to_alternative_st_boundary_;
 
@@ -229,6 +231,7 @@ class STObstaclesProcessor {
   // Note: 记录ADC Path哪些segment是OUT_ON_FORWARD_LANE/OUT_ON_REVERSE_LANE的
   std::vector<std::pair<double, double>> adc_low_road_right_segments_;
 
+  // Note: 对障碍物的decision类型会写入history_中
   History* history_ = History::Instance();
 };
 

@@ -85,6 +85,8 @@ class STBoundsDecider : public Decider {
   STBoundsDeciderConfig st_bounds_config_;
 
   STGuideLine st_guide_line_;
+  // Note: 用于获取adc在动力学约束下在st图中的极限位置
+  // Note: 但这个动力学约束条件的值是在代码里面写死的，这几个预设的约束值可能与真实的约束有较大差异
   STDrivingLimits st_driving_limits_;
   STObstaclesProcessor st_obstacles_processor_;
 };

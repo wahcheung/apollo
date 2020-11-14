@@ -71,6 +71,8 @@ void STDrivingLimits::UpdateBlockingInfo(const double t, const double lower_s,
                                          const double lower_v,
                                          const double upper_s,
                                          const double upper_v) {
+  // Note: 只有lower_s0_和upper_s0_是忠实地体现了最优s_gap(&driving_limit)做出的选择
+  // Note: lower_v和upper_v完全没用到
   auto curr_bounds = GetVehicleDynamicsLimits(t);
   if (curr_bounds.first < lower_s) {
     // lower_v0_ = std::fmax(lower_v, 0.0);

@@ -128,6 +128,7 @@ class STBoundary : public common::math::Polygon2d {
   void set_obstacle_road_right_ending_t(double road_right_ending_t) {
     obstacle_road_right_ending_t_ = road_right_ending_t;
   }
+  // Note: 障碍物高路权的结束时间
   double obstacle_road_right_ending_t() const {
     return obstacle_road_right_ending_t_;
   }
@@ -168,13 +169,13 @@ class STBoundary : public common::math::Polygon2d {
   std::vector<STPoint> upper_points_;
   std::vector<STPoint> lower_points_;
 
-  // Note: 障碍物的ID
+  // Note: 形成这个ST boundary的障碍物ID
   std::string id_;
   // Note: 对s上界和下届扩展的长度
   double characteristic_length_ = 1.0;
-  // Note: ST boundary里面的点的最小的s
+  // Note: ST boundary里面lower_points_的最小的s
   double min_s_ = std::numeric_limits<double>::max();
-  // Note: ST boundary里面的点的最大的s
+  // Note: ST boundary里面upper_points_的最大的s
   double max_s_ = std::numeric_limits<double>::lowest();
   // Note: ST boundary里面的点的最小的t(lower points第一个点的t)
   double min_t_ = std::numeric_limits<double>::max();

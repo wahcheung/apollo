@@ -34,7 +34,7 @@ using apollo::common::math::Vec2d;
 STBoundary::STBoundary(
     const std::vector<std::pair<STPoint, STPoint>>& point_pairs,
     bool is_accurate_boundary) {
-  // Note: 做一些基本检查，例如同一个t的lower s肯定要比upper s要小之类的检查
+  // Note: 做一些基本检查，例如同一个t的lower s肯定不能比upper s要大之类的检查
   CHECK(IsValid(point_pairs)) << "The input point_pairs are NOT valid";
 
   std::vector<std::pair<STPoint, STPoint>> reduced_pairs(point_pairs);
@@ -211,6 +211,8 @@ bool STBoundary::GetBoundarySRange(const double curr_time, double* s_upper,
   return true;
 }
 
+// Note: 求boundary在给定时间t处的斜率
+// 斜率用t前后0.05秒的boundary的s值来求
 bool STBoundary::GetBoundarySlopes(const double curr_time, double* ds_upper,
                                    double* ds_lower) const {
   if (ds_upper == nullptr || ds_lower == nullptr) {
@@ -342,6 +344,7 @@ void STBoundary::SetBoundaryType(const BoundaryType& boundary_type) {
   boundary_type_ = boundary_type;
 }
 
+// Note: 形成这个ST boundary的障碍物ID
 const std::string& STBoundary::id() const { return id_; }
 
 void STBoundary::set_id(const std::string& id) { id_ = id; }

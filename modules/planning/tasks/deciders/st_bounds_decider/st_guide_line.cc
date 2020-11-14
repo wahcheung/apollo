@@ -23,6 +23,7 @@
 namespace apollo {
 namespace planning {
 
+// Remind(huachang): 这个desired_v设置为default_cruise_speed是不是合理一些
 void STGuideLine::Init(double desired_v) {
   s0_ = 0.0;
   t0_ = 0.0;
@@ -30,7 +31,7 @@ void STGuideLine::Init(double desired_v) {
   v0_ = desired_v;
 }
 
-// Note: 匀速行驶的guide line
+// Note: 按照desired_v匀速行驶的guide line
 double STGuideLine::GetGuideSFromT(double t) const {
   return s0_ + (t - t0_) * v0_;
 }

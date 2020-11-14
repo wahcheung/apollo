@@ -254,6 +254,9 @@ class Obstacle {
   SLBoundary sl_boundary_;
 
   STBoundary reference_line_st_boundary_;
+  // Note: 这个在st_obstacles_processor中给出
+  // 如果是决定overtake的obstacle，这个boundary用的就是alternative_st_boundary，
+  // 否则用的就是原始的st_boundary
   STBoundary path_st_boundary_;
 
   ObjectDecisionType lateral_decision_;

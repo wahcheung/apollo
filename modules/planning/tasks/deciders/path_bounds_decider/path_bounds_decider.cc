@@ -284,6 +284,7 @@ void PathBoundsDecider::InitPathBoundsDecider(
   // Initialize some private variables.
   // ADC s/l info.
   auto adc_sl_info = reference_line.ToFrenetFrame(planning_start_point);
+  // Note: 由于参考线一直以自车位置为基础，往后延伸50米，往前延伸一百多米，因此，adc_frenet_s_一般是一个接近50的值
   adc_frenet_s_ = adc_sl_info.first[0];
   adc_frenet_l_ = adc_sl_info.second[0];
   adc_frenet_sd_ = adc_sl_info.first[1];
