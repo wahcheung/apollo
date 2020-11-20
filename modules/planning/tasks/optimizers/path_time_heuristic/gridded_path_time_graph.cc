@@ -100,16 +100,16 @@ Status GriddedPathTimeGraph::Search(SpeedData* const speed_data) {
       continue;
     }
     // If init point in collision with obstacle, return speed fallback
+    // Note: 起始点与障碍物有碰撞，直接给速度为零的speed
     if (boundary->IsPointInBoundary({0.0, 0.0}) ||
         (std::fabs(boundary->min_t()) < kBounadryEpsilon &&
          std::fabs(boundary->min_s()) < kBounadryEpsilon)) {
-      // Note: dimension_t_ = 7.0 / 0.1 + 1 = 71
+      // Note: dimension_t_ = 7.0 / 1.0 + 1 = 8
       dimension_t_ = static_cast<uint32_t>(std::ceil(
                          total_length_t_ / static_cast<double>(unit_t_))) +
                      1;
       std::vector<SpeedPoint> speed_profile;
       double t = 0.0;
-      // Note: 这里的速度为0的点太多了，一个点足够
       for (uint32_t i = 0; i < dimension_t_; ++i, t += unit_t_) {
         speed_profile.push_back(PointFactory::ToSpeedPoint(0, t));
       }
@@ -118,12 +118,14 @@ Status GriddedPathTimeGraph::Search(SpeedData* const speed_data) {
     }
   }
 
+  // Note: 建立ST表，就是把表格的分割线位置描绘出来
   if (!InitCostTable().ok()) {
     const std::string msg = "Initialize cost table failed.";
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
+  // Note: 给出s维度上各个下标处的speed_limit
   if (!InitSpeedLimitLookUp().ok()) {
     const std::string msg = "Initialize speed limit lookup table failed.";
     AERROR << msg;
@@ -144,6 +146,7 @@ Status GriddedPathTimeGraph::Search(SpeedData* const speed_data) {
   return Status::OK();
 }
 
+// Note: 建立ST表
 Status GriddedPathTimeGraph::InitCostTable() {
   // Time dimension is homogeneous while Spatial dimension has two resolutions,
   // dense and sparse with dense resolution coming first in the spatial horizon
@@ -172,7 +175,7 @@ Status GriddedPathTimeGraph::InitCostTable() {
   double sparse_length_s =
       total_length_s_ -
       static_cast<double>(dense_dimension_s_ - 1) * dense_unit_s_;
-  // Note: 稀疏点的数量
+  // Note: 稀疏点的数量，稀疏点间隔sparse_unit_s_为1.0m
   sparse_dimension_s_ =
       sparse_length_s > std::numeric_limits<double>::epsilon()
           ? static_cast<uint32_t>(std::ceil(sparse_length_s / sparse_unit_s_))
@@ -211,6 +214,8 @@ Status GriddedPathTimeGraph::InitCostTable() {
     }
   }
 
+  // Note: t=0.0的那一列
+  // Note: 把下标对应的s的值记录到spatial_distance_by_index_中
   const auto& cost_table_0 = cost_table_[0];
   spatial_distance_by_index_ = std::vector<double>(cost_table_0.size(), 0.0);
   for (uint32_t i = 0; i < cost_table_0.size(); ++i) {
@@ -219,6 +224,7 @@ Status GriddedPathTimeGraph::InitCostTable() {
   return Status::OK();
 }
 
+// Note: 给出s维度上各个下标处的speed_limit
 Status GriddedPathTimeGraph::InitSpeedLimitLookUp() {
   speed_limit_by_index_.clear();
 
@@ -226,6 +232,7 @@ Status GriddedPathTimeGraph::InitSpeedLimitLookUp() {
   const auto& speed_limit = st_graph_data_.speed_limit();
 
   for (uint32_t i = 0; i < dimension_s_; ++i) {
+    // Note: 这个GetSpeedLimitByS采样是根据s取的lower_bound的值
     speed_limit_by_index_[i] =
         speed_limit.GetSpeedLimitByS(cost_table_[0][i].point().s());
   }

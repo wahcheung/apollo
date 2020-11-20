@@ -82,6 +82,7 @@ class StGraphData {
   double total_time_by_conf_ = 0.0;
   planning_internal::STGraphDebug* st_graph_debug_ = nullptr;
 
+  // Note: st_bounds_decider中计算得出的可供行驶的st_boundary/vt_boundary
   STDrivableBoundary st_drivable_boundary_;
 };
 

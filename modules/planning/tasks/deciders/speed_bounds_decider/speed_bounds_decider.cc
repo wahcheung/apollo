@@ -45,6 +45,10 @@ SpeedBoundsDecider::SpeedBoundsDecider(const TaskConfig &config)
   speed_bounds_config_ = config.speed_bounds_decider_config();
 }
 
+// Note: 对于没做Longitudinal决策以及follow/overtake/yield的障碍物重新计算了STBoundary
+// 对于yield的STBoundary还对s上下界做了扩充
+// Note: 根据地图限速/向心加速度限制/Nudge决策导致的减速/预设的lowest_speed
+// 来确定path各处的速度限制，即speed_limit
 Status SpeedBoundsDecider::Process(
     Frame *const frame, ReferenceLineInfo *const reference_line_info) {
   // retrieve data from frame and reference_line_info
@@ -61,11 +65,14 @@ Status SpeedBoundsDecider::Process(
       path_data.discretized_path().Length(), speed_bounds_config_.total_time());
 
   if (!FLAGS_use_st_drivable_boundary) {
-    // Note: 不使用ST_BOUNDS_DECIDER的数据，清空
+    // Note: 不使用ST_BOUNDS_DECIDER的数据，重置obstacle的path_st_boundary_
     path_decision->EraseStBoundaries();
   }
 
-  // Note: 在函数里面，又计算了STBoundary，并且obstacle->set_path_st_boundary(boundary);
+  // Note: 在函数里面，对于没做Longitudinal决策以及follow/overtake/yield的障碍物重新计算了STBoundary
+  // 什么样的障碍物到这个流程是还没有Longitudinal决策的呢？
+  // 前面的st_bounds_decider虽然把所有与path有overlap的障碍物的STBoundary都算了，boundary也给了类型(stop/overtake/yield之类的)
+  // 但是并没有给这些在STGraph中的动态障碍物做Longitudinal decision
   if (boundary_mapper.ComputeSTBoundary(path_decision).code() ==
       ErrorCode::PLANNING_ERROR) {
     const std::string msg = "Mapping obstacle failed.";
@@ -83,6 +90,7 @@ Status SpeedBoundsDecider::Process(
     const auto &st_boundary = obstacle->path_st_boundary();
     if (!st_boundary.IsEmpty()) {
       if (st_boundary.boundary_type() == STBoundary::BoundaryType::KEEP_CLEAR) {
+        // Note: 这个字段 for keep_clear usage only
         path_decision->Find(id)->SetBlockingObstacle(false);
       } else {
         path_decision->Find(id)->SetBlockingObstacle(true);
@@ -91,12 +99,15 @@ Status SpeedBoundsDecider::Process(
     }
   }
 
+  // Note: 差不多就是去了STGraph中st_boundary的s最小值，函数里面的处理有点问题，逻辑上不能理解
   const double min_s_on_st_boundaries = SetSpeedFallbackDistance(path_decision);
 
   // 2. Create speed limit along path
   SpeedLimitDecider speed_limit_decider(speed_bounds_config_, reference_line,
                                         path_data);
 
+  // Note: 根据地图限速/向心加速度限制/Nudge决策导致的减速/预设的lowest_speed
+  // 来确定path各处的速度限制
   SpeedLimit speed_limit;
   if (!speed_limit_decider
            .GetSpeedLimits(path_decision->obstacles(), &speed_limit)
@@ -125,6 +136,8 @@ Status SpeedBoundsDecider::Process(
                           path_data_length, total_time_by_conf, st_graph_debug);
 
   // Create and record st_graph debug info
+  // TODO(huachang): 这个和st_bounds_decider中的RecordSTGraphDebug对比一下
+  // Remind(huachang): 这个speed_bounds_decider的st_graph不知道为什么没有在最终的ADCTrajectory中出现
   RecordSTGraphDebug(*st_graph_data, st_graph_debug);
 
   return Status::OK();
@@ -149,6 +162,8 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
     const auto lowest_s = std::min(left_bottom_point_s, right_bottom_point_s);
 
     // Note: 这个障碍物应该是逆向行驶的才会有left_bottom_point_s - right_bottom_point_s
+    // Remind(huachang): 下面这样处理的意义是什么，为什么要将min_s_non_reverse和min_s_reverse用if-elif来做互斥更新处理
+    // Remind(huachang): 这个speed fallback distance直接取所有st_boundary的s最小值不好吗?
     if (left_bottom_point_s - right_bottom_point_s > kEpsilon) {
       if (min_s_reverse > lowest_s) {
         min_s_reverse = lowest_s;
@@ -161,7 +176,7 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
   min_s_reverse = std::max(min_s_reverse, 0.0);
   min_s_non_reverse = std::max(min_s_non_reverse, 0.0);
 
-  // Note: 如果min_s_non_reverse较大直接就给0.0了，是不是会导致急刹
+  // Note: 这个speed fallback distance直接取所有st_boundary的s最小值不好吗?
   return min_s_non_reverse > min_s_reverse ? 0.0 : min_s_non_reverse;
 }
 

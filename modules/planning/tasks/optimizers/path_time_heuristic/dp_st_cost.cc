@@ -49,6 +49,7 @@ DpStCost::DpStCost(const DpStSpeedConfig& config, const double total_t,
     boundary_map_[obstacle->path_st_boundary().id()] = index++;
   }
 
+  // Note: 找出不能停车(禁停区KeepClear)的区间keep_clear_range_
   AddToKeepClearRange(obstacles);
 
   const auto dimension_t =

@@ -81,18 +81,23 @@ class DpStCost {
   bool InKeepClearRange(double s) const;
 
   const DpStSpeedConfig& config_;
+  // Note: 来自于reference_line_info->path_decision()->obstacles().Items()，在DpStCost初始化时传进来的
   const std::vector<const Obstacle*>& obstacles_;
 
+  // Note: adc的ST行驶通道，来源于st_bounds_decider，在DpStCost初始化时传进来的
   STDrivableBoundary st_drivable_boundary_;
 
+  // Note: 规划起始点，在DpStCost初始化时传进来的
   const common::TrajectoryPoint& init_point_;
 
   double unit_t_ = 0.0;
   double total_s_ = 0.0;
 
+  // Note: obstacle id对应的障碍物在obstacles_中的下标
   std::unordered_map<std::string, int> boundary_map_;
   std::vector<std::vector<std::pair<double, double>>> boundary_cost_;
 
+  // Note: 禁停区的区间
   std::vector<std::pair<double, double>> keep_clear_range_;
 
   std::array<double, 200> accel_cost_;

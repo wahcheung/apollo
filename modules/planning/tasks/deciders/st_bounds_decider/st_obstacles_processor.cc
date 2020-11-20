@@ -73,6 +73,7 @@ void STObstaclesProcessor::Init(const double planning_distance,
 }
 
 // Note: 算障碍物的精确的st-boundary，构建st-graph
+// Note: 凡是与adc path会有overlap的障碍物，都会有STBoundary
 // 对于那些没有与path overlap的障碍物，会被忽略，并添加ignore decision
 // Note: 预备知识
 // Prediction给的障碍物预测轨迹，t=0的点为障碍物所在位置点

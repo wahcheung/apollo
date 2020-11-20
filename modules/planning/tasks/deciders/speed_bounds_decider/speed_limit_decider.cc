@@ -54,6 +54,7 @@ Status SpeedLimitDecider::GetSpeedLimits(
   const auto& discretized_path = path_data_.discretized_path();
   const auto& frenet_path = path_data_.frenet_frame_path();
 
+  // Note: 对每个path point
   for (uint32_t i = 0; i < discretized_path.size(); ++i) {
     const double path_s = discretized_path.at(i).s();
     // Note: path_point在参考线的投影s
@@ -83,6 +84,7 @@ Status SpeedLimitDecider::GetSpeedLimits(
         std::numeric_limits<double>::max();
     const double collision_safety_range =
         speed_bounds_config_.collision_safety_range();
+    // Note: 对每个障碍物
     for (const auto* ptr_obstacle : obstacles.Items()) {
       if (ptr_obstacle->IsVirtual()) {
         continue;

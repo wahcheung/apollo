@@ -81,9 +81,17 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
     CHECK(ptr_obstacle != nullptr);
 
     // If no longitudinal decision has been made, then plot it onto ST-graph.
-    // Note: 流程走到了这里，会有障碍物没有LongitudinalDecision么
-    // Note: 感觉所有的障碍物在前面的流程中应该有stop/ignore/yield/overtake的决策了
+    // Note: 流程走到了这里，会有障碍物没有LongitudinalDecision么? 会
+    // Note: 在st_bounds_decider中只对不在STGraph中的障碍物做了ignore处理，
+    // 对其他障碍物没有做出longitudinal/lateral decision
+    // 此外，还有的就是在path_decider中对静止障碍物做了决策，还有在traffic rule中对back side vehicle做了ignore处理
+    // 总而言之，对于SPEED_BOUNDS_PRIORI_DECIDER，
+    // 之前的流程对于不是被ignore/stop的障碍物，还没有做出decision；这个也是出现在STGraph中的非stop类障碍物
+    // 对于SPEED_BOUNDS_FINAL_DECIDER，
+    // 在SPEED_BOUNDS_FINAL_DECIDER之前的SPEED_DECIDER已经对剩余的动态障碍物做出了decision，就不会再有没有decision的障碍物了
     if (!ptr_obstacle->HasLongitudinalDecision()) {
+      // Note: 对于之前没有做LongitudinalDecision的障碍物，重新算了STBoundary，这会覆盖旧的STBoundary
+      // 但里面沿用了旧的STBoundary的boundary_type
       ComputeSTBoundary(ptr_obstacle);
       continue;
     }
@@ -96,7 +104,7 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
       common::SLPoint stop_sl_point;
       reference_line_.XYToSL(decision.stop().stop_point(), &stop_sl_point);
       const double stop_s = stop_sl_point.s();
-
+      // Note: 找最近的需要stop的obstacle
       if (stop_s < min_stop_s) {
         stop_obstacle = ptr_obstacle;
         min_stop_s = stop_s;
@@ -106,13 +114,15 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
                decision.has_yield()) {
       // 2. Depending on the longitudinal overtake/yield decision,
       //    fine-tune the upper/lower st-boundary of related obstacles.
-      // Note: upper/lower st-boundary会被扩充
+      // Note: 在SPEED_BOUNDS_FINAL_DECIDER这个task中会进入到这里
+      // Note: yield类型的障碍物的STBoundary的upper/lower st-boundary会被扩充
       ComputeSTBoundaryWithDecision(ptr_obstacle, decision);
     } else if (!decision.has_ignore()) {
       // 3. Ignore those unrelated obstacles.
       AWARN << "No mapping for decision: " << decision.DebugString();
     }
   }
+  // Note: 对closest stop obstacle做处理，又算了一次STBoundary，覆盖了在st_bounds_decider中给的STBoundary
   if (stop_obstacle) {
     bool success = MapStopDecision(stop_obstacle, stop_decision);
     if (!success) {
@@ -131,6 +141,7 @@ bool STBoundaryMapper::MapStopDecision(
   common::SLPoint stop_sl_point;
   reference_line_.XYToSL(stop_decision.stop().stop_point(), &stop_sl_point);
 
+  // Note: 停车时车front edge的ref. s
   double st_stop_s = 0.0;
   const double stop_ref_s =
       stop_sl_point.s() - vehicle_param_.front_edge_to_center();
@@ -196,6 +207,9 @@ void STBoundaryMapper::ComputeSTBoundary(Obstacle* obstacle) const {
   obstacle->set_path_st_boundary(boundary);
 }
 
+// Note: Map the given obstacle onto the ST-Graph.
+// The boundary is represented as upper and lower points for every s of interests.
+// Note: 对于每一个t(即障碍物trajectory的point)，先用大的step去检查是否overlap，然后再通过小的step去找更精确的overlap_s
 bool STBoundaryMapper::GetOverlapBoundaryPoints(
     const std::vector<PathPoint>& path_points, const Obstacle& obstacle,
     std::vector<STPoint>* upper_points,
@@ -235,9 +249,11 @@ bool STBoundaryMapper::GetOverlapBoundaryPoints(
 
       const Box2d& obs_box = obstacle.PerceptionBoundingBox();
       // Note: 自车(带横向buffer)走到这个点的时候会与障碍物发生碰撞
+      // Note: 就是判断两个box有没有overlap
       if (CheckOverlap(curr_point_on_path, obs_box, l_buffer)) {
         // If there is overlapping, then plot it on ST-graph.
-        // Note: 这个backward_distance过于保守了，但这是个静态障碍物，粗糙一点问题不到
+        // Note: 这个backward_distance过于保守了，但这是个静态障碍物，粗糙一点问题不大
+        // Note: 这个front_edge_to_center算是纵向的buffer了，距离前方障碍物front_edge_to_center
         const double backward_distance = -vehicle_param_.front_edge_to_center();
         const double forward_distance = obs_box.length();
         double low_s =
@@ -248,6 +264,7 @@ bool STBoundaryMapper::GetOverlapBoundaryPoints(
         // TODO(jiacheng): reconsider the backward_distance, it might be
         // unnecessary, but forward_distance is indeed meaningful though.
         // Note: 这个一个横跨所有时间的boundary
+        // Note: 起作用的是这个low_s
         lower_points->emplace_back(low_s, 0.0);
         lower_points->emplace_back(low_s, planning_max_time_);
         upper_points->emplace_back(high_s, 0.0);
@@ -293,6 +310,7 @@ bool STBoundaryMapper::GetOverlapBoundaryPoints(
             discretized_path.Evaluate(path_s + discretized_path.front().s());
         if (CheckOverlap(curr_adc_path_point, obs_box, l_buffer)) {
           // Found overlap, start searching with higher resolution
+          // Note: 回退到上一个点，从这里开始以更细的stop length进行检查
           const double backward_distance = -step_length;
           const double forward_distance = vehicle_param_.length() +
                                           vehicle_param_.width() +
@@ -384,6 +402,7 @@ void STBoundaryMapper::ComputeSTBoundaryWithDecision(
     characteristic_length = std::fabs(decision.follow().distance_s());
     b_type = STBoundary::BoundaryType::FOLLOW;
   } else if (decision.has_yield()) {
+    // Note: 对于需要避让的障碍物，为保险起见，把它的STBoundary扩充一下
     characteristic_length = std::fabs(decision.yield().distance_s());
     boundary = STBoundary::CreateInstance(lower_points, upper_points)
                    .ExpandByS(characteristic_length);
