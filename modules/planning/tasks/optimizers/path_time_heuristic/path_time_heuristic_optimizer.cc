@@ -67,6 +67,7 @@ Status PathTimeHeuristicOptimizer::Process(
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
 
+  // Note: 这个speed_data就是搜索到的需要经过那些STGraphPoint以及这些点的估计速度是多少
   if (!SearchPathTimeGraph(speed_data)) {
     const std::string msg(Name() +
                           ":Failed to search graph with dynamic programming.");

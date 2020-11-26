@@ -67,9 +67,13 @@ class StGraphPoint {
   std::uint32_t index_s_ = 0;
   std::uint32_t index_t_ = 0;
 
+  // Note: 通过上一个点的位置和速度信息，需要达到当前点的话，当前点的预估速度
   double optimal_speed_ = 0.0;
   double reference_cost_ = 0.0;
+  // Note: st_graph_point在t轴方向上距离障碍物越近则cost越大
   double obstacle_cost_ = 0.0;
+  // Note: 对s做惩罚，效果就是追求更快地到达远处
+  // Note: (total_s_ - point.point().s()) * config_.spatial_potential_penalty()
   double spatial_potential_cost_ = 0.0;
   double total_cost_ = std::numeric_limits<double>::infinity();
 };

@@ -102,6 +102,7 @@ void DpStCost::SortAndMergeRange(
   keep_clear_range->resize(i + 1);
 }
 
+// Note: 判断传入的位置是否在禁停区内
 bool DpStCost::InKeepClearRange(double s) const {
   for (const auto& p : keep_clear_range_) {
     if (p.first <= s && p.second >= s) {
@@ -126,6 +127,7 @@ double DpStCost::GetObstacleCost(const StGraphPoint& st_graph_point) {
     const double upper_bound =
         st_drivable_boundary_.st_boundary(index).s_upper();
 
+    // Note: 检查的ST Table的点不在可通行的st_drivable_boundary内
     if (s > upper_bound || s < lower_bound) {
       return kInf;
     }
@@ -147,20 +149,24 @@ double DpStCost::GetObstacleCost(const StGraphPoint& st_graph_point) {
 
     auto boundary = obstacle->path_st_boundary();
 
+    // Note: 在远方超过200米
     if (boundary.min_s() > FLAGS_speed_lon_decision_horizon) {
       continue;
     }
     if (t < boundary.min_t() || t > boundary.max_t()) {
       continue;
     }
+    // Note: 这个st_graph_point与障碍物碰撞，无法通行
     if (boundary.IsPointInBoundary(st_graph_point.point())) {
       return kInf;
     }
+    // Note: 障碍物st_boundary在t时刻对应的s_lower和s_upper
     double s_upper = 0.0;
     double s_lower = 0.0;
 
     int boundary_index = boundary_map_[boundary.id()];
     if (boundary_cost_[boundary_index][st_graph_point.index_t()].first < 0.0) {
+      // Note: 障碍物st_boundary在t时刻对应的s_lower和s_upper
       boundary.GetBoundarySRange(t, &s_upper, &s_lower);
       boundary_cost_[boundary_index][st_graph_point.index_t()] =
           std::make_pair(s_upper, s_lower);
@@ -168,8 +174,10 @@ double DpStCost::GetObstacleCost(const StGraphPoint& st_graph_point) {
       s_upper = boundary_cost_[boundary_index][st_graph_point.index_t()].first;
       s_lower = boundary_cost_[boundary_index][st_graph_point.index_t()].second;
     }
+    // Note: 下面判断的意思就是st_graph_point越接近障碍物boundary则cost越大
     if (s < s_lower) {
       const double follow_distance_s = config_.safe_distance();
+      // Note: 离得比较远的话则不算这个obstacle cost
       if (s + follow_distance_s < s_lower) {
         continue;
       } else {
@@ -178,6 +186,7 @@ double DpStCost::GetObstacleCost(const StGraphPoint& st_graph_point) {
                 s_diff * s_diff;
       }
     } else if (s > s_upper) {
+      // Note: 固定值20m
       const double overtake_distance_s =
           StGapEstimator::EstimateSafeOvertakingGap();
       if (s > s_upper + overtake_distance_s) {  // or calculated from velocity
@@ -202,6 +211,8 @@ double DpStCost::GetReferenceCost(const STPoint& point,
          (point.s() - reference_point.s()) * unit_t_;
 }
 
+// Note: 对在禁停区内超低速行驶做惩罚 / 对偏离限速做惩罚 / 对偏离参考行驶速度做惩罚
+// Remind(huachang): config里面的default_speed_cost单纯起了个放大倍数的作用，完全可以将值直接给到对应的penalty
 double DpStCost::GetSpeedCost(const STPoint& first, const STPoint& second,
                               const double speed_limit,
                               const double cruise_speed) const {
@@ -215,12 +226,15 @@ double DpStCost::GetSpeedCost(const STPoint& first, const STPoint& second,
                                         ->GetConfig()
                                         .vehicle_param()
                                         .max_abs_speed_when_stopped();
+  // Note: 对在禁停区内超低速行驶做惩罚
   if (speed < max_adc_stop_speed && InKeepClearRange(second.s())) {
     // first.s in range
     cost += config_.keep_clear_low_speed_penalty() * unit_t_ *
             config_.default_speed_cost();
   }
 
+  // Note: 对偏离限速做惩罚
+  // Note: det_speed是偏离限速的百分比
   double det_speed = (speed - speed_limit) / speed_limit;
   if (det_speed > 0) {
     cost += config_.exceed_speed_penalty() * config_.default_speed_cost() *
@@ -230,6 +244,7 @@ double DpStCost::GetSpeedCost(const STPoint& first, const STPoint& second,
             -det_speed * unit_t_;
   }
 
+  // Note: 对偏离参考行驶速度做惩罚
   if (FLAGS_enable_dp_reference_speed) {
     double diff_speed = speed - cruise_speed;
     cost += config_.reference_speed_penalty() * config_.default_speed_cost() *
@@ -239,10 +254,13 @@ double DpStCost::GetSpeedCost(const STPoint& first, const STPoint& second,
   return cost;
 }
 
+// Note: 对加速/减速做惩罚
 double DpStCost::GetAccelCost(const double accel) {
   double cost = 0.0;
   static constexpr double kEpsilon = 0.1;
   static constexpr size_t kShift = 100;
+  // Note: 这里试图通过一个简单规则的hash map来复用已经计算过的加速度的cost
+  // TODO(huachang): 这个hash map可能需要改进一下
   const size_t accel_key = static_cast<size_t>(accel / kEpsilon + 0.5 + kShift);
   DCHECK_LT(accel_key, accel_cost_.size());
   if (accel_key >= accel_cost_.size()) {
@@ -256,11 +274,16 @@ double DpStCost::GetAccelCost(const double accel) {
     double accel_penalty = config_.accel_penalty();
     double decel_penalty = config_.decel_penalty();
 
+    // Note: 加速度为正则对加速做惩罚，为负则对减速度做惩罚(使用不一样的penalty值)
     if (accel > 0.0) {
       cost = accel_penalty * accel_sq;
     } else {
       cost = decel_penalty * accel_sq;
     }
+    // Remind(huachang): bug，当accel从1加到6，cost先增大后减小
+    // Note: 下面这个cost公式虽然有点用，但狗屁不通，公式对加速度的惩罚关系不清晰
+    // Note: 下面这个cost在加减速的情况下，数值非常大
+    // 基于现在的参数设置，accel为1时这个cost为18万，accel为-1时这个cost为25万
     cost += accel_sq * decel_penalty * decel_penalty /
                 (1 + std::exp(1.0 * (accel - max_dec))) +
             accel_sq * accel_penalty * accel_penalty /
@@ -272,25 +295,33 @@ double DpStCost::GetAccelCost(const double accel) {
   return cost * unit_t_;
 }
 
+// Note: 就是求后两个点之间的加速度，计算加速度的cost
 double DpStCost::GetAccelCostByThreePoints(const STPoint& first,
                                            const STPoint& second,
                                            const STPoint& third) {
+  // Note: a = (v_3 - v_2) / t = ((s_3 - s_2) / t - (s_2 - s_1) / t) / t
+  // Remind(huachang): 这样求加速度是不是不太合理，是不是应该基于公式s=v_0*t+1/2*a*t*t来算
   double accel = (first.s() + third.s() - 2 * second.s()) / (unit_t_ * unit_t_);
   return GetAccelCost(accel);
 }
 
+// Note: 对加速和减速做惩罚
 double DpStCost::GetAccelCostByTwoPoints(const double pre_speed,
                                          const STPoint& pre_point,
                                          const STPoint& curr_point) {
   double current_speed = (curr_point.s() - pre_point.s()) / unit_t_;
   double accel = (current_speed - pre_speed) / unit_t_;
+  // Note: 对加速和减速做惩罚
   return GetAccelCost(accel);
 }
 
+// Note: 计算jerk的cost
 double DpStCost::JerkCost(const double jerk) {
   double cost = 0.0;
   static constexpr double kEpsilon = 0.1;
   static constexpr size_t kShift = 200;
+  // Note: 这里也是用了一个简单规则实现的hash map在复用已经计算过的jerk_cost
+  // TODO(huachang): 这个hash map可能需要改进一下
   const size_t jerk_key = static_cast<size_t>(jerk / kEpsilon + 0.5 + kShift);
   if (jerk_key >= jerk_cost_.size()) {
     return kInf;
@@ -316,6 +347,7 @@ double DpStCost::GetJerkCostByFourPoints(const STPoint& first,
                                          const STPoint& second,
                                          const STPoint& third,
                                          const STPoint& fourth) {
+  // Note: 这个就是基于v=(s-s_p)/t这个假设，一步步推出来的结果
   double jerk = (fourth.s() - 3 * third.s() + 3 * second.s() - first.s()) /
                 (unit_t_ * unit_t_ * unit_t_);
   return JerkCost(jerk);
@@ -326,6 +358,7 @@ double DpStCost::GetJerkCostByTwoPoints(const double pre_speed,
                                         const STPoint& pre_point,
                                         const STPoint& curr_point) {
   const double curr_speed = (curr_point.s() - pre_point.s()) / unit_t_;
+  // Remind(huachang): 这个curr_accel计算错误，应该是这个值的两倍
   const double curr_accel = (curr_speed - pre_speed) / unit_t_;
   const double jerk = (curr_accel - pre_acc) / unit_t_;
   return JerkCost(jerk);
@@ -335,6 +368,7 @@ double DpStCost::GetJerkCostByThreePoints(const double first_speed,
                                           const STPoint& first,
                                           const STPoint& second,
                                           const STPoint& third) {
+  // Remind(huachang): 这个速度估计不合理，应该使用距离公式s=v_0*t+1/2*a*t*t来求
   const double pre_speed = (second.s() - first.s()) / unit_t_;
   const double pre_acc = (pre_speed - first_speed) / unit_t_;
   const double curr_speed = (third.s() - second.s()) / unit_t_;

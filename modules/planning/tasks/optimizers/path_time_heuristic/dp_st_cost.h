@@ -90,16 +90,22 @@ class DpStCost {
   // Note: 规划起始点，在DpStCost初始化时传进来的
   const common::TrajectoryPoint& init_point_;
 
+  // Note: 初始化之后是1.0s
   double unit_t_ = 0.0;
   double total_s_ = 0.0;
 
   // Note: obstacle id对应的障碍物在obstacles_中的下标
   std::unordered_map<std::string, int> boundary_map_;
+  // Note: outer size为obstacles_.size()
+  // Note: inner size为dimension_t
+  // Note: 内容都被初始化为make_pair(-1.0, -1.0)
+  // Note: 这个实际上存放的是障碍物st_boundary在t时刻对应的s_lower和s_upper
   std::vector<std::vector<std::pair<double, double>>> boundary_cost_;
 
   // Note: 禁停区的区间
   std::vector<std::pair<double, double>> keep_clear_range_;
 
+  // Note: 这是两个简单的hash map，用于复用已经计算过的特定accel和jerk的cost
   std::array<double, 200> accel_cost_;
   std::array<double, 400> jerk_cost_;
 };

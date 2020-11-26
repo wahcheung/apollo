@@ -85,8 +85,10 @@ class GriddedPathTimeGraph {
  private:
   const StGraphData& st_graph_data_;
 
+  // Note: 给出s维度上各个下标处的speed_limit
   std::vector<double> speed_limit_by_index_;
 
+  // Note: 给出s轴方向上各个分界点处的s值
   std::vector<double> spatial_distance_by_index_;
 
   // dp st configuration
@@ -100,6 +102,7 @@ class GriddedPathTimeGraph {
       common::VehicleConfigHelper::GetConfig().vehicle_param();
 
   // initial status
+  // Note: 这一帧规划的起始点
   common::TrajectoryPoint init_point_;
 
   // cost utility with configuration;
@@ -119,6 +122,7 @@ class GriddedPathTimeGraph {
   uint32_t dimension_s_ = 0;
 
   double max_acceleration_ = 0.0;
+  // Note: 这个通过vehicle_param_和speed_heuristic_config中的配置而来(去绝对值较小的)
   double max_deceleration_ = 0.0;
 
   // cost_table_[t][s]
