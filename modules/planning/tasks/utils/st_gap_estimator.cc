@@ -60,6 +60,7 @@ double StGapEstimator::EstimateProperFollowingGap(const double adc_speed) {
 }
 
 // TODO(Jinyun): add more variables to yielding gap calculation
+// Remind(huachang): 避让的距离应该更灵活一些，例如对大卡车避让距离应该更远
 double StGapEstimator::EstimateProperYieldingGap() {
   return FLAGS_yield_distance;
 }

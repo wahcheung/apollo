@@ -63,6 +63,10 @@ common::Status SpeedDecider::Execute(Frame* frame,
   return Status::OK();
 }
 
+// Note: 判断STPoint从障碍物STBoundary的什么位置经过
+// ABOVE表示speed_profile从障碍物STBoundary的上方通过
+// BELOW表示speed_profile从障碍物STBoundary的下方通过
+// CROSS表示speed_profile与障碍物STBoundary有overlap
 SpeedDecider::STLocation SpeedDecider::GetSTLocation(
     const PathDecision* const path_decision, const SpeedData& speed_profile,
     const STBoundary& st_boundary) const {
@@ -77,6 +81,8 @@ SpeedDecider::STLocation SpeedDecider::GetSTLocation(
   for (size_t i = 0; i + 1 < speed_profile.size(); ++i) {
     const STPoint curr_st(speed_profile[i].s(), speed_profile[i].t());
     const STPoint next_st(speed_profile[i + 1].s(), speed_profile[i + 1].t());
+    // Remind(huachang): 判断curr_st.t() < start_t是多此一举
+    // 因为后面的next_st.t() < start_t保证了curr_st.t() < start_t
     if (curr_st.t() < start_t && next_st.t() < start_t) {
       continue;
     }
@@ -107,10 +113,16 @@ SpeedDecider::STLocation SpeedDecider::GetSTLocation(
     //       but we need iterate all st points to make sure there is no CROSS
     if (!st_position_set) {
       if (start_t < next_st.t() && curr_st.t() < end_t) {
+        // Note: 障碍物st_boundary的左上方点
         STPoint bd_point_front = st_boundary.upper_points().front();
+        // Note: 通过向量叉乘来判断两个线段的相对位置关系
+        // 记bd_point_front, curr_st, next_st分别为A, B, C点
+        // 通过判断向量AB与向量AC的叉乘来判断线段AC在AB的什么方向上
+        // 如果AB×AC为负，则AC在AB的顺时针方向，否则在逆时针方向
         double side = common::math::CrossProd(bd_point_front, curr_st, next_st);
         st_location = side < 0.0 ? ABOVE : BELOW;
         st_position_set = true;
+        // Remind(huachang): 为什么不break退出循环?
       }
     }
   }
@@ -145,6 +157,7 @@ bool SpeedDecider::CheckKeepClearCrossable(
   return keep_clear_crossable;
 }
 
+// Note: 如果有个障碍物在禁停区的正前方近处，我们不能进入这个禁停区
 bool SpeedDecider::CheckKeepClearBlocked(
     const PathDecision* const path_decision,
     const Obstacle& keep_clear_obstacle) const {
@@ -161,6 +174,7 @@ bool SpeedDecider::CheckKeepClearBlocked(
     const double distance =
         obstacle_start_s - keep_clear_obstacle.PerceptionSLBoundary().end_s();
 
+    // Note: 有个障碍物在禁停区的正前方近处，我们不能进入这个禁停区
     if (obstacle->IsBlockingObstacle() && distance > 0 &&
         distance < (adc_length / 2)) {
       keep_clear_blocked = true;
@@ -170,11 +184,20 @@ bool SpeedDecider::CheckKeepClearBlocked(
   return keep_clear_blocked;
 }
 
+/**
+ * @brief "too close" is determined by whether ego vehicle will hit the front
+ * obstacle if the obstacle drive at current speed and ego vehicle use some
+ * reasonable deceleration
+ **/
+// Note: 跟车太近的逻辑基于一个假设，
+// 如果自车速度大于前方障碍物速度，自车通过最大减速度减速到前方障碍物同样的速度，这时候自车会不会距离前方障碍物小于预设距离
 bool SpeedDecider::IsFollowTooClose(const Obstacle& obstacle) const {
+  // Note: 只有禁停区(Keep Clear)不是BlockingObstacle
   if (!obstacle.IsBlockingObstacle()) {
     return false;
   }
 
+  // Note: 障碍物目前不在自车path上
   if (obstacle.path_st_boundary().min_t() > 0.0) {
     return false;
   }
@@ -211,12 +234,15 @@ Status SpeedDecider::MakeObjectDecision(
     auto* mutable_obstacle = path_decision->Find(obstacle->Id());
     const auto& boundary = mutable_obstacle->path_st_boundary();
 
+    // Note: ignore不在STGraph中的障碍物，这些障碍物与path没有overlap
+    // Note: 这一步在之前的task里面是不是已经做过?
     if (boundary.IsEmpty() || boundary.max_s() < 0.0 ||
         boundary.max_t() < 0.0 ||
         boundary.min_t() >= speed_profile.back().t()) {
       AppendIgnoreDecision(mutable_obstacle);
       continue;
     }
+    // Note: 实质上相当于如果横向没有decision的话，就添加横向的ignore decision
     if (obstacle->HasLongitudinalDecision()) {
       AppendIgnoreDecision(mutable_obstacle);
       continue;
@@ -231,8 +257,12 @@ Status SpeedDecider::MakeObjectDecision(
     }
 
     // always STOP for pedestrian
+    // Remind(huachang): 下面对行人的处理导致近处的行人一下子把车逼停，体感非常不好
+    // 这主要是由于参数kSDistanceStartTimer以及停车距离的设置的设置导致停车点就在车前方两三米，来不及刹车导致fallback
+    // TODO(huachang): 这里stop fence的位置需要更灵活一点，应该能大幅改善出现行人时的体感
     if (CheckStopForPedestrian(*mutable_obstacle)) {
       ObjectDecisionType stop_decision;
+      // Note: 行人的stop是所有stop中最近的，则添加stop_decision
       if (CreateStopDecision(*mutable_obstacle, &stop_decision,
                              -FLAGS_min_stop_distance_obstacle)) {
         mutable_obstacle->AddLongitudinalDecision("dp_st_graph/pedestrian",
@@ -241,10 +271,12 @@ Status SpeedDecider::MakeObjectDecision(
       continue;
     }
 
+    // Note: 判断STPoint从障碍物STBoundary的什么位置经过
     auto location = GetSTLocation(path_decision, speed_profile, boundary);
 
     if (!FLAGS_use_st_drivable_boundary) {
       if (boundary.boundary_type() == STBoundary::BoundaryType::KEEP_CLEAR) {
+        // Note: 如果有个障碍物在禁停区的正前方近处，我们不能进入这个禁停区
         if (CheckKeepClearBlocked(path_decision, *obstacle)) {
           location = BELOW;
         }
@@ -259,6 +291,7 @@ Status SpeedDecider::MakeObjectDecision(
             mutable_obstacle->AddLongitudinalDecision("dp_st_graph/keep_clear",
                                                       stop_decision);
           }
+        // Note: 判断是否是应该Follow的障碍物
         } else if (CheckIsFollow(*obstacle, boundary)) {
           // stop for low_speed decelerating
           if (IsFollowTooClose(*mutable_obstacle)) {
@@ -300,6 +333,7 @@ Status SpeedDecider::MakeObjectDecision(
         }
         break;
       case CROSS:
+        // Note: 针对普通障碍物，而不是禁停区
         if (mutable_obstacle->IsBlockingObstacle()) {
           ObjectDecisionType stop_decision;
           if (CreateStopDecision(*mutable_obstacle, &stop_decision,
@@ -342,6 +376,7 @@ bool SpeedDecider::CreateStopDecision(const Obstacle& obstacle,
   // TODO(all): this is a bug! Cannot mix reference s and path s!
   // Replace boundary.min_s() with computed reference line s
   // fence is set according to reference line s.
+  // Remind(huachang): 这里混用各种s值了，逻辑不清晰，虽然最后的效果一般都没差
   double fence_s = adc_sl_boundary_.end_s() + boundary.min_s() + stop_distance;
   if (boundary.boundary_type() == STBoundary::BoundaryType::KEEP_CLEAR) {
     fence_s = obstacle.PerceptionSLBoundary().start_s();
@@ -382,6 +417,7 @@ bool SpeedDecider::CreateFollowDecision(
       -StGapEstimator::EstimateProperFollowingGap(follow_speed);
 
   const auto& boundary = obstacle.path_st_boundary();
+  // Remind(huachang): boundary.min_s()混用在这里十分不合理，这个处理是很不精确的，不可控
   const double reference_s =
       adc_sl_boundary_.end_s() + boundary.min_s() + follow_distance_s;
   const double main_stop_s =
@@ -418,6 +454,7 @@ bool SpeedDecider::CreateYieldDecision(
   const double yield_distance_s =
       std::max(-obstacle_boundary.min_s(), -yield_distance);
 
+  // Remind(huachang): speed decider到处混用
   const double reference_line_fence_s =
       adc_sl_boundary_.end_s() + obstacle_boundary.min_s() + yield_distance_s;
   const double main_stop_s =
@@ -447,10 +484,12 @@ bool SpeedDecider::CreateOvertakeDecision(
     const Obstacle& obstacle,
     ObjectDecisionType* const overtake_decision) const {
   const auto& velocity = obstacle.Perception().velocity();
+  // Note: 障碍物在自车朝向上的速度分量
   const double obstacle_speed =
       common::math::Vec2d::CreateUnitVec2d(init_point_.path_point().theta())
           .InnerProd(Vec2d(velocity.x(), velocity.y()));
 
+  // Remind(huachang): 这里overtake gap设置之后有什么用途
   const double overtake_distance_s =
       StGapEstimator::EstimateProperOvertakingGap(obstacle_speed,
                                                   init_point_.v());
@@ -482,20 +521,29 @@ bool SpeedDecider::CreateOvertakeDecision(
   return true;
 }
 
+// Note: 通过障碍物STBoundary检查是否应该follow该障碍物，下面这些障碍物都不follow
+// 1. 不在本车道上的，
+// 2. 还没进入本车道的，
+// 3. 马上要离开本车道的，
+// 4. 逆向行驶的障碍物，
+// 5. 与adc path交叉时间不足2秒的障碍物
 bool SpeedDecider::CheckIsFollow(const Obstacle& obstacle,
                                  const STBoundary& boundary) const {
   const double obstacle_l_distance =
       std::min(std::fabs(obstacle.PerceptionSLBoundary().start_l()),
                std::fabs(obstacle.PerceptionSLBoundary().end_l()));
+  // Note: 认为障碍物不在本车道上(横向偏离参考线较远)
   if (obstacle_l_distance > FLAGS_follow_min_obs_lateral_distance) {
     return false;
   }
 
   // move towards adc
+  // Note: 这个障碍物是逆行行驶的(相对于adc)
   if (boundary.bottom_left_point().s() > boundary.bottom_right_point().s()) {
     return false;
   }
 
+  // Note: 对于还没进入本车道以及马上要离开本车道(adc的path)的障碍物不做跟车处理
   static constexpr double kFollowTimeEpsilon = 1e-3;
   static constexpr double kFollowCutOffTime = 0.5;
   if (boundary.min_t() > kFollowCutOffTime ||
@@ -504,6 +552,7 @@ bool SpeedDecider::CheckIsFollow(const Obstacle& obstacle,
   }
 
   // cross lane but be moving to different direction
+  // Note: 障碍物预测轨迹与自车path交叉的时间少于2秒，认为这个障碍物只是横穿该车道(例如十字路口处)
   if (boundary.max_t() - boundary.min_t() < FLAGS_follow_min_time_sec) {
     return false;
   }
@@ -511,12 +560,15 @@ bool SpeedDecider::CheckIsFollow(const Obstacle& obstacle,
   return true;
 }
 
+// Note: 对十米外的行人obstacle一律返回true，对于十米内的行人，执行以下处理
+// Note: 走得比较快的行人obstacle一律停车，对走得很慢的行人，等4秒之后就不等了
 bool SpeedDecider::CheckStopForPedestrian(const Obstacle& obstacle) const {
   const auto& perception_obstacle = obstacle.Perception();
   if (perception_obstacle.type() != PerceptionObstacle::PEDESTRIAN) {
     return false;
   }
 
+  // Note: 后方行人
   const auto& obstacle_sl_boundary = obstacle.PerceptionSLBoundary();
   if (obstacle_sl_boundary.end_s() < adc_sl_boundary_.start_s()) {
     return false;
@@ -529,9 +581,11 @@ bool SpeedDecider::CheckStopForPedestrian(const Obstacle& obstacle) const {
   static constexpr double kSDistanceStartTimer = 10.0;
   static constexpr double kMaxStopSpeed = 0.3;
   static constexpr double kPedestrianStopTimeout = 4.0;
+  // Note: 自车在10米内会与行人(预测轨迹轨迹)相交
   if (obstacle.path_st_boundary().min_s() < kSDistanceStartTimer) {
     const auto obstacle_speed = std::hypot(perception_obstacle.velocity().x(),
                                            perception_obstacle.velocity().y());
+    // Note: 走得比较快的与轨迹overlap的近处(10m)行人一律停车
     if (obstacle_speed > kMaxStopSpeed) {
       pedestrian_stop_timer_.erase(obstacle_id);
     } else {

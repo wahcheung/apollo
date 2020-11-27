@@ -99,7 +99,7 @@ Status SpeedBoundsDecider::Process(
     }
   }
 
-  // Note: 差不多就是去了STGraph中st_boundary的s最小值，函数里面的处理有点问题，逻辑上不能理解
+  // Note: 差不多就是取了STGraph中st_boundary的s最小值，函数里面的处理有点问题，逻辑上不能理解
   const double min_s_on_st_boundaries = SetSpeedFallbackDistance(path_decision);
 
   // 2. Create speed limit along path

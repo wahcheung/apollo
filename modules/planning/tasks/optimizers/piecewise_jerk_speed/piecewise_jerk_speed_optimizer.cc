@@ -50,6 +50,7 @@ PiecewiseJerkSpeedOptimizer::PiecewiseJerkSpeedOptimizer(
 Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
                                             const TrajectoryPoint& init_point,
                                             SpeedData* const speed_data) {
+  // Note: 到达终点，距离终点小于5cm
   if (reference_line_info_->ReachedDestination()) {
     return Status::OK();
   }
@@ -69,6 +70,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
 
   std::array<double, 3> init_s = {0.0, st_graph_data.init_point().v(),
                                   st_graph_data.init_point().a()};
+  // Note: 对t做0.1秒的间隔采样
   double delta_t = 0.1;
   double total_length = st_graph_data.path_length();
   double total_time = st_graph_data.total_time_by_conf();
@@ -85,6 +87,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
       piecewise_jerk_speed_config.jerk_weight());
 
   piecewise_jerk_problem.set_x_bounds(0.0, total_length);
+  // Note: x导数不小于0.0，使得这个值只增不减
   piecewise_jerk_problem.set_dx_bounds(
       0.0, std::fmax(FLAGS_planning_upper_speed_limit,
                      st_graph_data.init_point().v()));
@@ -93,6 +96,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
   piecewise_jerk_problem.set_dddx_bound(FLAGS_longitudinal_jerk_lower_bound,
                                         FLAGS_longitudinal_jerk_upper_bound);
 
+  // Note: 设定参考速度
   piecewise_jerk_problem.set_dx_ref(piecewise_jerk_speed_config.ref_v_weight(),
                                     reference_line_info_->GetCruiseSpeed());
 
@@ -148,8 +152,10 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
     x_ref.emplace_back(path_s);
     // get curvature
     PathPoint path_point = path_data.GetPathPointWithPathS(path_s);
+    // Note: 转弯处对速度做惩罚
     penalty_dx.push_back(std::fabs(path_point.kappa()) *
                          piecewise_jerk_speed_config.kappa_penalty_weight());
+    // Note: 设置速度上下界
     // get v_upper_bound
     const double v_lower_bound = 0.0;
     double v_upper_bound = FLAGS_planning_upper_speed_limit;
@@ -178,6 +184,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
            << ", a = " << dds[i];
   }
   speed_data->clear();
+  // Note: s,t,v,a,da
   speed_data->AppendSpeedPoint(s[0], 0.0, ds[0], dds[0], 0.0);
   for (int i = 1; i < num_of_knots; ++i) {
     // Avoid the very last points when already stopped
@@ -187,6 +194,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
     speed_data->AppendSpeedPoint(s[i], delta_t * i, ds[i], dds[i],
                                  (dds[i] - dds[i - 1]) / delta_t);
   }
+  // Remind(huachang): 这个没必要，添加一个速度为0的点就够了
   SpeedProfileGenerator::FillEnoughSpeedPoints(speed_data);
   RecordDebugInfo(*speed_data, st_graph_data.mutable_st_graph_debug());
   return Status::OK();

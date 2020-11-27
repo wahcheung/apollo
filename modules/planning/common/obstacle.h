@@ -263,6 +263,7 @@ class Obstacle {
   ObjectDecisionType longitudinal_decision_;
 
   // for keep_clear usage only
+  // Note: 这个只为了对禁停区做标识，作限制性障碍物之意
   bool is_blocking_obstacle_ = false;
 
   // Note: obstacle是否位于reference_line上，挡住通道
