@@ -44,7 +44,8 @@ STBoundsDecider::STBoundsDecider(const TaskConfig& config) : Decider(config) {
 }
 
 // Note: STBoundsDecider输出的内容有
-// 1. 所有动态障碍物的STBoundary和closest_stop_obstacle的STBoundary到path_decision中，STBoundary都根据最优的gap给了boundary type
+// 1. 计算所有动态障碍物的STBoundary和closest_stop_obstacle的STBoundary并存到path_decision中，
+//    STBoundary都根据最优的gap给了boundary type
 //    对不记录在STGraph中的障碍物添加了纵向&横向的ignore decision(这些障碍物与adc的path没有交集)
 //    虽然给出了障碍物的STBoundary和STBoundary的类型，但并没有对这些非ignore、非stop的障碍物做decision
 // 2. 计算了regular_st_bound和regular_vt_bound并写入st_graph_data中

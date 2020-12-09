@@ -200,6 +200,8 @@ class STObstaclesProcessor {
   PathData path_data_;
   common::VehicleParam vehicle_param_;
   // Note: 来自path_data_.discretized_path().front().s()
+  // Note: adc_path_init_s_一般就是0.0
+  // 具体原因查看PathData::SetFrenetPath，将frenet path转成xy时，对第一个点的s置0了，后面累加
   double adc_path_init_s_;
   PathDecision* path_decision_;
 

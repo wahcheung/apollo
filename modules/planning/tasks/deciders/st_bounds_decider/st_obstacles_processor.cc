@@ -225,6 +225,8 @@ Status STObstaclesProcessor::MapObstaclesToSTBoundaries(
     if (obs_ptr->Trajectory().trajectory_point().empty()) {
       // Obstacle is static.
       // Note: 尝试更新最近的需要停车的静止障碍物
+      // Note: closest_stop_obstacle就是bottom_left_point最近的障碍物，
+      // 这个完全没有考虑stop_distance的位置，实际上导致停车的stop_point不一定就是这个障碍物给出的
       if (std::get<0>(closest_stop_obstacle) == "NULL" ||
           std::get<1>(closest_stop_obstacle).bottom_left_point().s() >
               boundary.bottom_left_point().s()) {
@@ -437,6 +439,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
     auto obs_id = obs_id_to_decision_pair.first;
     auto obs_decision = obs_id_to_decision_pair.second;
     auto obs_st_boundary = obs_id_to_st_boundary_[obs_id];
+    // Note: 对于决定overtake的障碍物，adc一旦先行通过低路权区间，则无需再理会这个障碍物
     if (obs_decision.has_overtake() &&
         // Note: adc越过overlap起始点已经过了一段时间
         obs_st_boundary.min_t() <= t - kOvertakenObsCautionTime &&
