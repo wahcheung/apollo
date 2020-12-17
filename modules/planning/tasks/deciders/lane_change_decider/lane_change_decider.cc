@@ -87,6 +87,7 @@ Status LaneChangeDecider::Process(
     return Status::OK();
   }
 
+  // Note: 一次成功的变道会依次经历 1*变道流程_1 --> n*变道流程_2 --> 1*变道流程_3
   bool has_change_lane = reference_line_info->size() > 1;
   ADEBUG << "has_change_lane: " << has_change_lane;
   // Note: 非变道场景，简单地更新状态
@@ -95,6 +96,7 @@ Status LaneChangeDecider::Process(
     if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FINISHED) {
       // Note: 之前的状态就是变道完成，也没有处于变道场景，无需做任何操作
     } else if (prev_status->status() == ChangeLaneStatus::IN_CHANGE_LANE) {
+      // Note: 变道流程_3
       // Note: 之前还在变道，但当前只有一条参考线，表明已经进入目标车道，变道完成
       UpdateStatus(now, ChangeLaneStatus::CHANGE_LANE_FINISHED, path_id);
     } else if (prev_status->status() == ChangeLaneStatus::CHANGE_LANE_FAILED) {
@@ -108,6 +110,7 @@ Status LaneChangeDecider::Process(
     }
     return Status::OK();
   } else {  // has change lane in reference lines.
+    // Note: 变道的目标车道ID
     auto current_path_id = GetCurrentPathId(*reference_line_info);
     // Note: 有两条参考线，却没有找到变道的参考线passage，返回异常
     if (current_path_id.empty()) {
@@ -117,8 +120,9 @@ Status LaneChangeDecider::Process(
     }
     if (prev_status->status() == ChangeLaneStatus::IN_CHANGE_LANE) {
       if (prev_status->path_id() == current_path_id) {
-        // Note: 还没变道过去
-        // Note: 优先变道
+        // Note: 变道流程_2
+        // Note: 车辆变道过程中，会连续多次进入这里
+        // Note: 还没完成变道，继续优先对变道参考线进行处理
         PrioritizeChangeLane(true, reference_line_info);
       } else {
         // Note: 已经变道到目标车道了，变道完成
@@ -152,8 +156,10 @@ Status LaneChangeDecider::Process(
         PrioritizeChangeLane(false, reference_line_info);
         ADEBUG << "freezed after completed lane change";
       } else {
-        // Note: 进入变道场景，优先变道
+        // Note: 变道流程_1
+        // Note: 进入变道场景，优先对变道参考线做规划
         PrioritizeChangeLane(true, reference_line_info);
+        // Note: 从这里进入IN_CHANGE_LANE状态，进入变道逻辑
         UpdateStatus(now, ChangeLaneStatus::IN_CHANGE_LANE, current_path_id);
         ADEBUG << "change lane again after success";
       }

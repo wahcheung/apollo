@@ -234,8 +234,7 @@ Status SpeedDecider::MakeObjectDecision(
     auto* mutable_obstacle = path_decision->Find(obstacle->Id());
     const auto& boundary = mutable_obstacle->path_st_boundary();
 
-    // Note: ignore不在STGraph中的障碍物，这些障碍物与path没有overlap
-    // Note: 这一步在之前的task里面是不是已经做过?
+    // Note: ignore不在STGraph中的障碍物
     if (boundary.IsEmpty() || boundary.max_s() < 0.0 ||
         boundary.max_t() < 0.0 ||
         boundary.min_t() >= speed_profile.back().t()) {
@@ -249,6 +248,7 @@ Status SpeedDecider::MakeObjectDecision(
     }
 
     // for Virtual obstacle, skip if center point NOT "on lane"
+    // Note: 不在本车道上的虚拟障碍物不做处理
     if (obstacle->IsVirtual()) {
       const auto& obstacle_box = obstacle->PerceptionBoundingBox();
       if (!reference_line_->IsOnLane(obstacle_box.center())) {
@@ -533,6 +533,8 @@ bool SpeedDecider::CheckIsFollow(const Obstacle& obstacle,
       std::min(std::fabs(obstacle.PerceptionSLBoundary().start_l()),
                std::fabs(obstacle.PerceptionSLBoundary().end_l()));
   // Note: 认为障碍物不在本车道上(横向偏离参考线较远)
+  // Remind(huachang): 这个代码写得不对，与预期的效果不符，如果obstacle比较宽，就不会了
+  // 改成obstacle.start_l大于某个阈值或者obstacle.end_l小于某个阈值比较合理，意思是，障碍物偏离车道就不follow
   if (obstacle_l_distance > FLAGS_follow_min_obs_lateral_distance) {
     return false;
   }
@@ -562,13 +564,14 @@ bool SpeedDecider::CheckIsFollow(const Obstacle& obstacle,
 
 // Note: 对十米外的行人obstacle一律返回true，对于十米内的行人，执行以下处理
 // Note: 走得比较快的行人obstacle一律停车，对走得很慢的行人，等4秒之后就不等了
+// Note: 只有一种类型的行人不做STOP处理，就是10米内的停够4秒钟的低速(小于0.3m/s)行人
 bool SpeedDecider::CheckStopForPedestrian(const Obstacle& obstacle) const {
   const auto& perception_obstacle = obstacle.Perception();
   if (perception_obstacle.type() != PerceptionObstacle::PEDESTRIAN) {
     return false;
   }
 
-  // Note: 后方行人
+  // Note: 车屁股后方行人
   const auto& obstacle_sl_boundary = obstacle.PerceptionSLBoundary();
   if (obstacle_sl_boundary.end_s() < adc_sl_boundary_.start_s()) {
     return false;

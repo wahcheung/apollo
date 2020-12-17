@@ -86,12 +86,13 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
     // 对其他障碍物没有做出longitudinal/lateral decision
     // 此外，还有的就是在path_decider中对静止障碍物做了决策，还有在traffic rule中对back side vehicle做了ignore处理
     // 总而言之，对于SPEED_BOUNDS_PRIORI_DECIDER，
-    // 之前的流程对于不是被ignore/stop的障碍物，还没有做出decision；这个也是出现在STGraph中的非stop类障碍物
+    // 之前的task对于不是被ignore/stop的障碍物，还没有做出longitudinal decision；(出现在STGraph中的非静止类障碍物还没做纵向决策)
     // 对于SPEED_BOUNDS_FINAL_DECIDER，
     // 在SPEED_BOUNDS_FINAL_DECIDER之前的SPEED_DECIDER已经对剩余的动态障碍物做出了decision，就不会再有没有decision的障碍物了
     if (!ptr_obstacle->HasLongitudinalDecision()) {
       // Note: 对于之前没有做LongitudinalDecision的障碍物，重新算了STBoundary，这会覆盖旧的STBoundary
-      // 但里面沿用了旧的STBoundary的boundary_type
+      // 如果use_st_drivable_boundary，则boundary_type还是用的ST_BOUNDS_DECIDER中给的boundary_type
+      // Remind(huachang): 如果use_st_drivable_boundary为false，则boundary_type未设置
       ComputeSTBoundary(ptr_obstacle);
       continue;
     }
@@ -101,6 +102,7 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
     if (decision.has_stop()) {
       // 1. Store the closest stop fence info.
       // TODO(all): store ref. s value in stop decision; refine the code then.
+      // Note: 找最近的需要停车的障碍物停车点
       common::SLPoint stop_sl_point;
       reference_line_.XYToSL(decision.stop().stop_point(), &stop_sl_point);
       const double stop_s = stop_sl_point.s();
@@ -122,7 +124,7 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
       AWARN << "No mapping for decision: " << decision.DebugString();
     }
   }
-  // Note: 对closest stop obstacle做处理，又算了一次STBoundary，覆盖了在st_bounds_decider中给的STBoundary
+  // Note: 对最近的stop_point做处理，计算一个STOP类型的STBoundary，这个STBoundary的上界扩充了一个boundary_buffer
   if (stop_obstacle) {
     bool success = MapStopDecision(stop_obstacle, stop_decision);
     if (!success) {
@@ -135,6 +137,7 @@ Status STBoundaryMapper::ComputeSTBoundary(PathDecision* path_decision) const {
   return Status::OK();
 }
 
+// Note: 给最近的stop_point画STBoundary，这个STBoundary的类型是STOP
 bool STBoundaryMapper::MapStopDecision(
     Obstacle* stop_obstacle, const ObjectDecisionType& stop_decision) const {
   DCHECK(stop_decision.has_stop()) << "Must have stop decision";
@@ -159,6 +162,7 @@ bool STBoundaryMapper::MapStopDecision(
     st_stop_s = stop_point.s();
   }
 
+  // Note: 给最近的stop_point画STBoundary
   const double s_min = std::fmax(0.0, st_stop_s);
   const double s_max = std::fmax(
       s_min, std::fmax(planning_max_distance_, reference_line_.Length()));
@@ -171,14 +175,15 @@ bool STBoundaryMapper::MapStopDecision(
               planning_max_time_));
   auto boundary = STBoundary(point_pairs);
   boundary.SetBoundaryType(STBoundary::BoundaryType::STOP);
-  // Note: 这个扩展的长度是不是会导致adc front_edge无法靠到stop point处
   boundary.SetCharacteristicLength(speed_bounds_config_.boundary_buffer());
   boundary.set_id(stop_obstacle->Id());
   stop_obstacle->set_path_st_boundary(boundary);
   return true;
 }
 
-// Note: 算障碍物的ST Boundary，但boundary_type还是用的ST_BOUNDS_DECIDER中给的boundary_type
+// Note: 算障碍物的ST Boundary，这里给出的STBoundary不是accurate的，对上下边界做了合并平滑处理
+// 如果use_st_drivable_boundary，则boundary_type还是用的ST_BOUNDS_DECIDER中给的boundary_type
+// Remind(huachang): 如果use_st_drivable_boundary为false，则boundary_type未设置
 void STBoundaryMapper::ComputeSTBoundary(Obstacle* obstacle) const {
   if (FLAGS_use_st_drivable_boundary) {
     return;
@@ -204,6 +209,7 @@ void STBoundaryMapper::ComputeSTBoundary(Obstacle* obstacle) const {
     boundary.SetBoundaryType(ref_line_st_boundary.boundary_type());
   }
 
+  // Note: 覆盖了原来的STBoundary
   obstacle->set_path_st_boundary(boundary);
 }
 
@@ -399,15 +405,18 @@ void STBoundaryMapper::ComputeSTBoundaryWithDecision(
   // 对STBoundary的所有t的上下s都扩展characteristic_length
   double characteristic_length = 0.0;
   if (decision.has_follow()) {
+    // Note: 跟车距离，在speed_decider中给出
     characteristic_length = std::fabs(decision.follow().distance_s());
     b_type = STBoundary::BoundaryType::FOLLOW;
   } else if (decision.has_yield()) {
     // Note: 对于需要避让的障碍物，为保险起见，把它的STBoundary扩充一下
+    // Note: distance_s为避让距离，在speed_decider中给出
     characteristic_length = std::fabs(decision.yield().distance_s());
     boundary = STBoundary::CreateInstance(lower_points, upper_points)
                    .ExpandByS(characteristic_length);
     b_type = STBoundary::BoundaryType::YIELD;
   } else if (decision.has_overtake()) {
+    // Note: overtake距离，在speed_decider中给出
     characteristic_length = std::fabs(decision.overtake().distance_s());
     b_type = STBoundary::BoundaryType::OVERTAKE;
   } else {

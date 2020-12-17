@@ -69,10 +69,13 @@ Status SpeedBoundsDecider::Process(
     path_decision->EraseStBoundaries();
   }
 
-  // Note: 在函数里面，对于没做Longitudinal决策以及follow/overtake/yield的障碍物重新计算了STBoundary
+  // Note: 在函数里面，对于没做Longitudinal决策以及有follow/overtake/yield决策的障碍物重新计算了STBoundary
+  // 并且对最近的stop_point做处理，计算一个STOP类型的STBoundary，这个STBoundary的上界扩充了一个boundary_buffer
   // 什么样的障碍物到这个流程是还没有Longitudinal决策的呢？
   // 前面的st_bounds_decider虽然把所有与path有overlap的障碍物的STBoundary都算了，boundary也给了类型(stop/overtake/yield之类的)
-  // 但是并没有给这些在STGraph中的动态障碍物做Longitudinal decision
+  // 但只对不在STGraph中的障碍物添加了横向和纵向的ignore decision，
+  // 并没有给这些在STGraph中的障碍物做Longitudinal decision
+  // 也就是说，在st_bounds_decider中算的STBoundary都没用
   if (boundary_mapper.ComputeSTBoundary(path_decision).code() ==
       ErrorCode::PLANNING_ERROR) {
     const std::string msg = "Mapping obstacle failed.";
@@ -138,11 +141,14 @@ Status SpeedBoundsDecider::Process(
   // Create and record st_graph debug info
   // TODO(huachang): 这个和st_bounds_decider中的RecordSTGraphDebug对比一下
   // Remind(huachang): 这个speed_bounds_decider的st_graph不知道为什么没有在最终的ADCTrajectory中出现
+  // Note: 这个debug信息的Name在speed_optimizer中的RecordDebugInfo被覆盖了
   RecordSTGraphDebug(*st_graph_data, st_graph_debug);
 
   return Status::OK();
 }
 
+// Remind(huachang): 这里取fallback的s的方法不合理，一个逆向行驶的车辆迎面而来，如果预测轨迹穿过adc，则这个fallback_s就是0了
+// 不应该考虑超过一定时间之后的障碍物
 double SpeedBoundsDecider::SetSpeedFallbackDistance(
     PathDecision *const path_decision) {
   // Set min_s_on_st_boundaries to guide speed fallback.
@@ -161,7 +167,7 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
     const auto right_bottom_point_s = st_boundary.bottom_right_point().s();
     const auto lowest_s = std::min(left_bottom_point_s, right_bottom_point_s);
 
-    // Note: 这个障碍物应该是逆向行驶的才会有left_bottom_point_s - right_bottom_point_s
+    // Note: 这个障碍物应该是逆向行驶的才会有left_bottom_point_s > right_bottom_point_s
     // Remind(huachang): 下面这样处理的意义是什么，为什么要将min_s_non_reverse和min_s_reverse用if-elif来做互斥更新处理
     // Remind(huachang): 这个speed fallback distance直接取所有st_boundary的s最小值不好吗?
     if (left_bottom_point_s - right_bottom_point_s > kEpsilon) {
@@ -173,7 +179,9 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
     }
   }
 
+  // Note: 所有逆向行驶的障碍物的lowest_s
   min_s_reverse = std::max(min_s_reverse, 0.0);
+  // Note: 所有正向行驶的障碍物的lowest_s
   min_s_non_reverse = std::max(min_s_non_reverse, 0.0);
 
   // Note: 这个speed fallback distance直接取所有st_boundary的s最小值不好吗?

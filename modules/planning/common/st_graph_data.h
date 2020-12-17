@@ -72,7 +72,9 @@ class StGraphData {
 
  private:
   bool init_ = false;
+  // Note: 这个从speed_bounds_decider中来
   std::vector<const STBoundary*> st_boundaries_;
+  // Note: fallback距离
   double min_s_on_st_boundaries_ = 0.0;
   apollo::common::TrajectoryPoint init_point_;
   SpeedLimit speed_limit_;

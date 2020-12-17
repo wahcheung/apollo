@@ -63,6 +63,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
+  // Note: 这个数据大部分来自speed_bounds_decider(除了st_drivable_boundary)
   StGraphData& st_graph_data = *reference_line_info_->mutable_st_graph_data();
 
   const auto& veh_param =
@@ -106,6 +107,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
     double curr_t = i * delta_t;
     double s_lower_bound = 0.0;
     double s_upper_bound = total_length;
+    // Note: 对STGraph中的STBoundary
     for (const STBoundary* boundary : st_graph_data.st_boundaries()) {
       double s_lower = 0.0;
       double s_upper = 0.0;
@@ -119,6 +121,7 @@ Status PiecewiseJerkSpeedOptimizer::Process(const PathData& path_data,
           break;
         case STBoundary::BoundaryType::FOLLOW:
           // TODO(Hongyi): unify follow buffer on decision side
+          // Remind(huachang): 这个可以参照YIELD和STOP，直接在speed_decider中就对STBoundary做扩展，不用在这里-8.0
           s_upper_bound = std::fmin(s_upper_bound, s_upper - 8.0);
           break;
         case STBoundary::BoundaryType::OVERTAKE:

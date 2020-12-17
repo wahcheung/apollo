@@ -53,6 +53,7 @@ STBoundsDecider::STBoundsDecider(const TaskConfig& config) : Decider(config) {
 Status STBoundsDecider::Process(Frame* const frame,
                                 ReferenceLineInfo* const reference_line_info) {
   // Initialize the related helper classes.
+  // Note: 构建st图，对无关障碍物添加ignore decision，初始化辅助工具类（st_guide_line_/st_driving_limits_）
   InitSTBoundsDecider(*frame, reference_line_info);
 
   // Sweep the t-axis, and determine the s-boundaries step by step.
@@ -89,7 +90,7 @@ Status STBoundsDecider::Process(Frame* const frame,
   return Status::OK();
 }
 
-// Note: 构建st图，初始化辅助工具类（st_guide_line_/st_driving_limits_）
+// Note: 构建st图，对无关障碍物添加ignore decision，初始化辅助工具类（st_guide_line_/st_driving_limits_）
 void STBoundsDecider::InitSTBoundsDecider(
     const Frame& frame, ReferenceLineInfo* const reference_line_info) {
   const PathData& path_data = reference_line_info->path_data();
@@ -109,6 +110,7 @@ void STBoundsDecider::InitSTBoundsDecider(
          << " msec.";
 
   // Initialize Guide-Line and Driving-Limits.
+  // Remind(huachang): 初始化参数根据车辆配置来是不是合理一些
   static constexpr double desired_speed = 15.0;
   st_guide_line_.Init(desired_speed);
   static constexpr double max_acc = 2.5;
@@ -222,7 +224,7 @@ Status STBoundsDecider::GenerateFallbackSTBound(STBound* const st_bound,
   return Status::OK();
 }
 
-// Note: 对与每一个时刻t，对s gap做排序，选最优的排序，然后结合车辆动力学极限，获得t时刻的s bound
+// Note: 对与每一个时刻t，对s gap做排序，选最优的gap，然后结合车辆动力学极限，获得t时刻的s bound
 // 根据t时刻最优的s gap，可以确定对障碍物的决策，根据决策可以给出一个速度范围，从而获得vt_bound
 Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
                                                STBound* const vt_bound) {
@@ -254,6 +256,8 @@ Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
     // Get Boundary due to obstacles
     std::vector<std::pair<double, double>> available_s_bounds;
     std::vector<ObsDecSet> available_obs_decisions;
+    // Remind(huachang): GetSBoundsFromDecisions里面有一个需要关注的点，
+    // 如果判断overtake，就将obstacle的path_st_boundary替换为alternative_st_boundary
     if (!st_obstacles_processor_.GetSBoundsFromDecisions(
             t, &available_s_bounds, &available_obs_decisions)) {
       const std::string msg =
@@ -299,6 +303,7 @@ Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
         s_upper = std::get<2>(top_choice_s_range);
         is_limited_by_upper_obs = true;
       }
+      // Note: 经过上面的一顿操作，现在(s_lower, s_upper)是实际可行的s_gap
 
       // Set decision for obstacles without decisions.
       // Note: top choice区间对障碍物的决策
@@ -309,11 +314,14 @@ Status STBoundsDecider::GenerateRegularSTBound(STBound* const st_bound,
 
       // Update st-guide-line, st-driving-limit info, and v-limits.
       std::pair<double, double> limiting_speed_info;
-      // Note: 根据yield/stop/overtake的decision，决定车速上下界
+      // Note: t时刻最近的上下STBoundary的斜率
+      // Remind(huachang): 这里的两个斜率与实际上自车速度的限制边界没有必然联系，明显缺陷
+      // 上方障碍物A的st_boundary的斜率不一定就比下方障碍物B的st_boundary的斜率大
       if (st_obstacles_processor_.GetLimitingSpeedInfo(t,
                                                        &limiting_speed_info)) {
         // Note: 更新了st_driving_limits_的lower_s0_和upper_s0_
         // Note: 传进去的limiting_speed_info信息没被使用
+        // Remind(huachang): 里面的更新操作不太合理，导致最终出来的limit非常的大(下限非常低，上限非常高)，起不了什么作用
         st_driving_limits_.UpdateBlockingInfo(
             t, s_lower, limiting_speed_info.first, s_upper,
             limiting_speed_info.second);

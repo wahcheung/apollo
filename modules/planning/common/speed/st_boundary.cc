@@ -126,7 +126,7 @@ std::string STBoundary::TypeName(BoundaryType type) {
   return "UNKNOWN";
 }
 
-// Note: curr_time时刻不被STBoundaryblocked的SRange
+// Note: 根据BoundaryType和STBoundary获取curr_time时刻不被STBoundaryblocked的SRange
 bool STBoundary::GetUnblockSRange(const double curr_time, double* s_upper,
                                   double* s_lower) const {
   CHECK_NOTNULL(s_upper);

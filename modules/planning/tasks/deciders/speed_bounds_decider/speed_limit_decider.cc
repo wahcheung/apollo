@@ -152,6 +152,7 @@ Status SpeedLimitDecider::GetSpeedLimits(
       }
     }
 
+    // Note: lowest_speed是为了避免限速过低
     double curr_speed_limit = 0.0;
     if (FLAGS_enable_nudge_slowdown) {
       curr_speed_limit =

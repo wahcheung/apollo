@@ -67,6 +67,7 @@ std::pair<double, double> STDrivingLimits::GetVehicleDynamicsLimits(
   return dynamic_limits;
 }
 
+// Remind(huachang): 这里更新各项参数的逻辑太奇怪了，感觉不应该要那两个if的判断条件
 void STDrivingLimits::UpdateBlockingInfo(const double t, const double lower_s,
                                          const double lower_v,
                                          const double upper_s,

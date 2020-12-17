@@ -217,6 +217,9 @@ class STObstaclesProcessor {
   std::unordered_map<std::string, STBoundary> obs_id_to_st_boundary_;
   // Note: 对障碍物的decision，当扫面线越过（到达）obstacle st右边界时，
   // 会erase该obstacle的decision
+  // Note: 在两个地方可能做出这个ObjectDecisionType
+  // 1. 扫描线扫到障碍物t_edge的入边，发现这个入边在driving_limits之外，可以直接做出decision
+  // 2. 对于每个时刻t，选出最优的s_gap之后，就会对障碍物做决策，然后把决策写入到这里
   std::unordered_map<std::string, ObjectDecisionType> obs_id_to_decision_;
 
   std::vector<std::tuple<std::string, STBoundary, Obstacle*>>

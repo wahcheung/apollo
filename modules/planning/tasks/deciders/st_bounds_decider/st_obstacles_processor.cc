@@ -72,7 +72,7 @@ void STObstaclesProcessor::Init(const double planning_distance,
   obs_id_to_alternative_st_boundary_.clear();
 }
 
-// Note: 算障碍物的精确的st-boundary，构建st-graph
+// Note: 算障碍物的精确的st-boundary，构建st-graph，对无关障碍物添加ignore decision
 // Note: 凡是与adc path会有overlap的障碍物，都会有STBoundary
 // 对于那些没有与path overlap的障碍物，会被忽略，并添加ignore decision
 // Note: 预备知识
@@ -347,7 +347,7 @@ STObstaclesProcessor::GetAllSTBoundaries() {
   return obs_id_to_st_boundary_;
 }
 
-// Note: 根据yield/stop/overtake的decision，以及boundary的斜率，决定车速上下界
+// Note: 根据t时刻最近的STBoundary的boundary斜率，算一个速度上下界
 bool STObstaclesProcessor::GetLimitingSpeedInfo(
     double t, std::pair<double, double>* const limiting_speed_info) {
   if (obs_id_to_decision_.empty()) {
@@ -404,9 +404,7 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
         std::get<1>(obs_t_edges_[obs_t_edges_idx_]) == t) {
       // Note: t时刻之前(包含t时刻)已经没有剩余的入边了
       // Note: obs_t_edges_中的edge都是排好序的
-      // Note: 这里直接break了是不是有bug，后面可能还会有符合这个判断的edge，
-      //       即有多个障碍物的st boundary的右边界在同一个时刻t
-      //       会导致下面这个障碍物的obs_id_to_decision_没被erase
+      // Note: break之后，t时刻的出边交给t+1时刻来处理
       break;
     }
     ADEBUG << "Seeing a new t-edge at t = "
@@ -502,8 +500,13 @@ bool STObstaclesProcessor::GetSBoundsFromDecisions(
     ADEBUG << "For obstacle id: " << std::get<4>(obs_t_edge)
            << ", its s-range = [" << std::get<2>(obs_t_edge) << ", "
            << std::get<3>(obs_t_edge) << "]";
-    // 根据障碍物st-boundary的入边做决策，想象st图比较好理解
+    // Note: 根据障碍物st-boundary的入边做决策，想象st图比较好理解
     if (std::get<0>(obs_t_edge) == 1) {
+      // Remind(huachang): 其实比较obs_t_edge.max_s与s_max的位置就可以做出决策
+      // 举个例子，如果obs_t_edge.max_s比s_max大，那么肯定是需要yield的
+      // 如果obs_t_edge.min_s比s_min小，那么肯定是需要overtake的
+      // 还有一种可能是，[bs_t_edge.min_s, bs_t_edge.max_s]包含[s_min, s_max]，
+      // 这样就不可通行了，在后续流程FindSGaps会发现s_gaps.empty()
       if (std::get<2>(obs_t_edge) >= s_max) {
         ADEBUG << "  Apparently, it should be yielded.";
         obs_id_to_decision_[std::get<4>(obs_t_edge)] =

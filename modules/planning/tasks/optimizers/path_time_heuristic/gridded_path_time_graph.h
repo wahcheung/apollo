@@ -110,7 +110,9 @@ class GriddedPathTimeGraph {
 
   // Note: 就是speed_bounds_config中的total_time
   double total_length_t_ = 0.0;
+  // Note: 配置值为1.0
   double unit_t_ = 0.0;
+  // Note: dimension_t_ = 7.0 / 1.0 + 1 = 8
   uint32_t dimension_t_ = 0;
 
   // Note: 即path_length
