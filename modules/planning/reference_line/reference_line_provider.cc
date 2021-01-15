@@ -278,7 +278,7 @@ bool ReferenceLineProvider::GetReferenceLines(
   return true;
 }
 
-// Note: 将route_segments倒序
+// Note: 将变道的目标参考线放到参考线list的开头
 void ReferenceLineProvider::PrioritzeChangeLane(
     std::list<hdmap::RouteSegments> *route_segments) {
   CHECK_NOTNULL(route_segments);
@@ -625,6 +625,7 @@ bool ReferenceLineProvider::CreateReferenceLine(
           AWARN << "Failed to project point: {" << vehicle_state.x() << ","
                 << vehicle_state.y() << "} to stitched reference line";
         }
+        // Note: 如果参考线heading变化超出阈值，则将超出heading变化范围之后的点裁剪掉
         // Note: 尝试对参考线进行收缩，如果参考线收缩了，那segments也会被收缩
         Shrink(sl, &reference_lines->back(), &(*iter));
         ++iter;

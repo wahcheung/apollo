@@ -174,6 +174,8 @@ Stage::StageStatus LaneFollowStage::Process(
 Status LaneFollowStage::PlanOnReferenceLine(
     const TrajectoryPoint& planning_start_point, Frame* frame,
     ReferenceLineInfo* reference_line_info) {
+  // Remind(huachang): 是否需要在这里添加一个判断，如果参考线不是drivable的，直接返回not ok
+  // 不应该对not drivable的参考线做规划
   if (!reference_line_info->IsChangeLanePath()) {
     // Note: 给直行的参考线一个惩罚
     reference_line_info->AddCost(kStraightForwardLineCost);

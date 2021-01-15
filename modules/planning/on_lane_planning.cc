@@ -330,6 +330,7 @@ void OnLanePlanning::RunOnce(const LocalView& local_view,
   for (auto& ref_line_info : *frame_->mutable_reference_line_info()) {
     TrafficDecider traffic_decider;
     traffic_decider.Init(traffic_rule_configs_);
+    // Note: 现在这个traffic_decider一定返回OK状态的
     auto traffic_status = traffic_decider.Execute(frame_.get(), &ref_line_info);
     if (!traffic_status.ok() || !ref_line_info.IsDrivable()) {
       ref_line_info.SetDrivable(false);
