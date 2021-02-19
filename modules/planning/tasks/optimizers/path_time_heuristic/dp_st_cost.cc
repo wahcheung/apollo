@@ -143,6 +143,8 @@ double DpStCost::GetObstacleCost(const StGraphPoint& st_graph_point) {
     // Stop obstacles are assumed to have a safety margin when mapping them out,
     // so repelling force in dp st is not needed as it is designed to have adc
     // stop right at the stop distance we design in prior mapping process
+    // Note: 这一整个函数就是想对太过于接近障碍物的dp速度做惩罚
+    // 不考虑has_stop的障碍物并不会对adc能否在障碍物后面停下来有影响
     if (obstacle->LongitudinalDecision().has_stop()) {
       continue;
     }

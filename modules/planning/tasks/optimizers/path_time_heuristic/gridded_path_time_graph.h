@@ -121,6 +121,7 @@ class GriddedPathTimeGraph {
   double sparse_unit_s_ = 0.0;
   uint32_t dense_dimension_s_ = 0;
   uint32_t sparse_dimension_s_ = 0;
+  // Note: 总的s采样点数量
   uint32_t dimension_s_ = 0;
 
   double max_acceleration_ = 0.0;

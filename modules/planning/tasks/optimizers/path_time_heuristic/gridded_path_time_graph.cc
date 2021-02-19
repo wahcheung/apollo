@@ -339,9 +339,9 @@ void GriddedPathTimeGraph::GetRowRange(const StGraphPoint& point,
 
 void GriddedPathTimeGraph::CalculateCostAt(
     const std::shared_ptr<StGraphMessage>& msg) {
-  // Note: 时间t
+  // Note: 时间t的下标
   const uint32_t c = msg->c;
-  // Note: 里程s
+  // Note: 里程s的下标
   const uint32_t r = msg->r;
   auto& cost_cr = cost_table_[c][r];
 
